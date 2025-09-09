@@ -8,11 +8,14 @@ from .professor import Professor
 from .source import Source
 from .term import Term
 from .card import Card
+from .upload_session import UploadSession, ChunkUpload
 
 __all__ = [
     "ClassSession",
     "Professor", 
     "Source",
     "Term",
-    "Card"
+    "Card",
+    "UploadSession",
+    "ChunkUpload"
 ]

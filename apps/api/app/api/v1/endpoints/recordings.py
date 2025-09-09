@@ -6,12 +6,15 @@ Maneja subida, procesamiento y gestión de grabaciones de clases.
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from pydantic import BaseModel
 import uuid
 from datetime import datetime
 
 from app.core import settings, api_logger, validate_upload_file, sanitize_filename
 from app.core.database import get_db
+from app.models import ClassSession, UploadSession, EstadoUpload
+from app.services.chunk_service import chunk_service
 
 router = APIRouter()
 
@@ -22,12 +25,18 @@ class RecordingCreate(BaseModel):
     tema: str
     profesor_text: str
     fecha: Optional[datetime] = None
+    filename: str
+    content_type: str
+    file_size_total: Optional[int] = None
+    file_checksum: Optional[str] = None
 
 
 class RecordingResponse(BaseModel):
     """Respuesta de creación de grabación."""
     recording_id: str
+    upload_session_id: str
     upload_urls: Optional[Dict[str, str]] = None
+    chunk_config: Optional[Dict[str, Any]] = None
     message: str
 
 
@@ -53,162 +62,404 @@ async def create_recording(
 ) -> RecordingResponse:
     """
     Iniciar una nueva sesión de grabación.
-    Crea el registro en base de datos y prepara para subida de audio.
+    Crea el registro en base de datos y prepara para subida de audio por chunks.
     """
-    # Generar ID único para la grabación
-    recording_id = str(uuid.uuid4())
-    
-    api_logger.info(
-        "Creando nueva grabación",
-        recording_id=recording_id,
-        asignatura=recording_data.asignatura,
-        tema=recording_data.tema,
-        profesor=recording_data.profesor_text
-    )
-    
-    # TODO: Crear registro en base de datos (ClassSession)
-    # Por ahora, solo simulamos la creación
-    
-    # En el futuro, aquí se crearían URLs pre-firmadas para MinIO
-    # o se configuraría el endpoint de subida por chunks
-    
-    upload_info = {
-        "chunk_upload_url": f"/api/v1/recordings/{recording_id}/chunk",
-        "complete_url": f"/api/v1/recordings/{recording_id}/complete",
-        "max_chunk_size_mb": 10,
-        "supported_formats": settings.ALLOWED_AUDIO_FORMATS
-    }
-    
-    api_logger.info(
-        "Grabación creada exitosamente",
-        recording_id=recording_id
-    )
-    
-    return RecordingResponse(
-        recording_id=recording_id,
-        upload_urls=upload_info,
-        message="Grabación iniciada. Procede a subir el audio por chunks."
-    )
+    try:
+        # Crear registro de ClassSession en base de datos
+        class_session = ClassSession(
+            fecha=recording_data.fecha or datetime.now().date(),
+            asignatura=recording_data.asignatura,
+            tema=recording_data.tema,
+            profesor_text=recording_data.profesor_text,
+            estado_pipeline="uploaded"
+        )
+        
+        db.add(class_session)
+        await db.commit()
+        await db.refresh(class_session)
+        
+        recording_id = str(class_session.id)
+        
+        api_logger.info(
+            "ClassSession creada",
+            recording_id=recording_id,
+            asignatura=recording_data.asignatura,
+            tema=recording_data.tema,
+            profesor=recording_data.profesor_text
+        )
+        
+        # Crear sesión de upload por chunks
+        upload_session = await chunk_service.create_upload_session(
+            db=db,
+            class_session_id=recording_id,
+            filename=recording_data.filename,
+            content_type=recording_data.content_type,
+            file_size_total=recording_data.file_size_total,
+            file_checksum=recording_data.file_checksum
+        )
+        
+        # Configuración de upload
+        upload_info = {
+            "chunk_upload_url": f"/api/v1/recordings/{recording_id}/chunk",
+            "complete_url": f"/api/v1/recordings/{recording_id}/complete",
+            "status_url": f"/api/v1/recordings/{recording_id}/upload-status",
+            "recovery_url": f"/api/v1/recordings/{recording_id}/recovery"
+        }
+        
+        chunk_config = {
+            "max_chunk_size_mb": settings.MAX_CHUNK_SIZE_MB,
+            "recommended_chunk_size_mb": 5,
+            "supported_formats": settings.ALLOWED_AUDIO_FORMATS,
+            "upload_session_id": str(upload_session.id),
+            "total_chunks_expected": upload_session.total_chunks_expected,
+            "expires_at": upload_session.expires_at.isoformat(),
+            "validation_enabled": True
+        }
+        
+        api_logger.info(
+            "Sesión de grabación creada exitosamente",
+            recording_id=recording_id,
+            upload_session_id=str(upload_session.id),
+            chunk_size_mb=settings.MAX_CHUNK_SIZE_MB
+        )
+        
+        return RecordingResponse(
+            recording_id=recording_id,
+            upload_session_id=str(upload_session.id),
+            upload_urls=upload_info,
+            chunk_config=chunk_config,
+            message="Grabación iniciada. Sistema de chunks configurado."
+        )
+        
+    except Exception as e:
+        api_logger.error(
+            "Error creando grabación",
+            asignatura=recording_data.asignatura,
+            filename=recording_data.filename,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creando grabación: {str(e)}"
+        )
 
 
 @router.post("/{recording_id}/chunk")
 async def upload_audio_chunk(
     recording_id: str,
+    upload_session_id: str = Form(...),
     chunk_number: int = Form(...),
-    total_chunks: int = Form(...),
+    total_chunks: Optional[int] = Form(None),
     file: UploadFile = File(...),
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     """
     Subir un chunk de audio de la grabación.
-    Permite subida resiliente por partes.
+    Sistema robusto con validación, recovery y progress tracking.
     """
-    api_logger.info(
-        "Recibiendo chunk de audio",
-        recording_id=recording_id,
-        chunk_number=chunk_number,
-        total_chunks=total_chunks,
-        filename=file.filename,
-        content_type=file.content_type
-    )
-    
-    # Validar archivo
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Nombre de archivo requerido")
-    
-    # Leer contenido para validación de tamaño
-    content = await file.read()
-    file_size = len(content)
-    
-    # Validar el archivo
-    is_valid, error_msg = validate_upload_file(
-        file.filename,
-        file.content_type or "application/octet-stream",
-        file_size,
-        settings.ALLOWED_AUDIO_FORMATS
-    )
-    
-    if not is_valid:
-        api_logger.error(
-            "Archivo inválido",
+    try:
+        api_logger.info(
+            "Recibiendo chunk de audio",
             recording_id=recording_id,
-            error=error_msg,
-            filename=file.filename
+            upload_session_id=upload_session_id,
+            chunk_number=chunk_number,
+            total_chunks=total_chunks,
+            filename=file.filename,
+            content_type=file.content_type
         )
-        raise HTTPException(status_code=400, detail=error_msg)
-    
-    # Sanitizar nombre de archivo
-    safe_filename = sanitize_filename(file.filename)
-    
-    # TODO: Guardar chunk en MinIO o sistema de archivos
-    # Por ahora, solo simulamos el guardado
-    
-    api_logger.info(
-        "Chunk guardado exitosamente",
-        recording_id=recording_id,
-        chunk_number=chunk_number,
-        file_size_bytes=file_size,
-        safe_filename=safe_filename
-    )
-    
-    return {
-        "message": f"Chunk {chunk_number}/{total_chunks} recibido exitosamente",
-        "recording_id": recording_id,
-        "chunk_number": chunk_number,
-        "total_chunks": total_chunks,
-        "file_size_bytes": file_size,
-        "status": "received"
-    }
+        
+        # Validar archivo
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="Nombre de archivo requerido")
+        
+        # Leer contenido del chunk
+        content = await file.read()
+        file_size = len(content)
+        
+        # Validar tamaño del chunk
+        max_chunk_size = settings.MAX_CHUNK_SIZE_MB * 1024 * 1024
+        if file_size > max_chunk_size:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Chunk demasiado grande. Máximo: {settings.MAX_CHUNK_SIZE_MB}MB"
+            )
+        
+        # Subir chunk usando el servicio
+        result = await chunk_service.upload_chunk(
+            db=db,
+            upload_session_id=upload_session_id,
+            chunk_number=chunk_number,
+            chunk_data=content,
+            total_chunks=total_chunks
+        )
+        
+        api_logger.info(
+            "Chunk procesado exitosamente",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            chunk_number=chunk_number,
+            status=result["status"],
+            progress=f"{result['chunks_received']}/{result['total_chunks'] or '?'}"
+        )
+        
+        # Agregar información adicional para el cliente
+        result.update({
+            "recording_id": recording_id,
+            "upload_session_id": upload_session_id,
+            "file_size_bytes": file_size,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        return result
+        
+    except ValueError as e:
+        api_logger.error(
+            "Error de validación en chunk",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            chunk_number=chunk_number,
+            error=str(e)
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    except Exception as e:
+        api_logger.error(
+            "Error interno procesando chunk",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            chunk_number=chunk_number,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error procesando chunk: {str(e)}"
+        )
 
 
 @router.post("/{recording_id}/complete")
 async def complete_recording_upload(
     recording_id: str,
-    total_chunks: int = Form(...),
-    final_filename: str = Form(...),
+    upload_session_id: str = Form(...),
+    validate_checksum: bool = Form(True),
     db: AsyncSession = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Completar la subida de grabación y iniciar procesamiento.
-    Une todos los chunks y encola las tareas de procesamiento.
+    Completar la subida de grabación y ensamblar archivo final.
+    Une todos los chunks, valida integridad e inicia procesamiento.
     """
-    api_logger.info(
-        "Completando subida de grabación",
-        recording_id=recording_id,
-        total_chunks=total_chunks,
-        final_filename=final_filename
-    )
-    
-    # TODO: 
-    # 1. Verificar que todos los chunks estén presentes
-    # 2. Unir chunks en archivo final
-    # 3. Actualizar registro en base de datos
-    # 4. Encolar tareas de procesamiento (ASR, diarización, etc.)
-    
-    # Simular encolado de tareas de procesamiento
-    processing_tasks = [
-        "ingest_audio",
-        "asr_transcribe", 
-        "diarize",
-        "postprocess",
-        "nlp_summarize"
-    ]
-    
-    api_logger.info(
-        "Procesamiento encolado",
-        recording_id=recording_id,
-        tasks=processing_tasks
-    )
-    
-    return {
-        "message": "Grabación completada. Procesamiento iniciado.",
-        "recording_id": recording_id,
-        "status": "processing",
-        "total_chunks_processed": total_chunks,
-        "final_filename": sanitize_filename(final_filename),
-        "processing_pipeline": processing_tasks,
-        "estimated_time_minutes": 5  # Estimación basada en duración
-    }
+    try:
+        api_logger.info(
+            "Completando subida de grabación",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            validate_checksum=validate_checksum
+        )
+        
+        # Ensamblar archivo final usando el servicio de chunks
+        final_url = await chunk_service.assemble_file(
+            db=db,
+            upload_session_id=upload_session_id,
+            validate_checksum=validate_checksum
+        )
+        
+        # Actualizar ClassSession con la URL del archivo
+        result = await db.execute(
+            select(ClassSession).where(ClassSession.id == recording_id)
+        )
+        class_session = result.scalar_one_or_none()
+        
+        if class_session:
+            class_session.audio_url = final_url
+            class_session.estado_pipeline = "asr"  # Listo para procesamiento ASR
+            await db.commit()
+        
+        # Obtener información final de la sesión de upload
+        upload_status = await chunk_service.get_upload_status(db, upload_session_id)
+        
+        # TODO: Encolar tareas de procesamiento (Celery tasks)
+        processing_tasks = [
+            "asr_transcribe", 
+            "diarize_speakers",
+            "postprocess_transcription",
+            "nlp_summarize",
+            "generate_content"
+        ]
+        
+        api_logger.info(
+            "Grabación completada exitosamente",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            final_url=final_url,
+            file_size_mb=round(upload_status["bytes_uploaded"] / (1024 * 1024), 2)
+        )
+        
+        return {
+            "message": "Grabación completada exitosamente. Archivo ensamblado.",
+            "recording_id": recording_id,
+            "upload_session_id": upload_session_id,
+            "status": "completed",
+            "final_file_url": final_url,
+            "file_info": {
+                "filename": upload_status["filename"],
+                "content_type": upload_status["content_type"],
+                "file_size_bytes": upload_status["bytes_uploaded"],
+                "file_size_mb": round(upload_status["bytes_uploaded"] / (1024 * 1024), 2),
+                "total_chunks": upload_status["chunks_received"],
+                "upload_time_seconds": upload_status.get("total_upload_time_sec"),
+                "upload_speed_mbps": upload_status.get("upload_speed_mbps")
+            },
+            "processing_pipeline": processing_tasks,
+            "next_step": "asr_processing",
+            "estimated_processing_minutes": max(5, upload_status["bytes_uploaded"] // (1024 * 1024 * 2))  # ~2MB/min
+        }
+        
+    except ValueError as e:
+        api_logger.error(
+            "Error de validación completando upload",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            error=str(e)
+        )
+        raise HTTPException(status_code=400, detail=str(e))
+        
+    except Exception as e:
+        api_logger.error(
+            "Error interno completando upload",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error completando upload: {str(e)}"
+        )
+
+
+@router.get("/{recording_id}/upload-status")
+async def get_upload_status(
+    recording_id: str,
+    upload_session_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Obtener estado detallado del upload por chunks.
+    Incluye progreso, chunks faltantes y métricas de rendimiento.
+    """
+    try:
+        # Obtener estado del upload
+        upload_status = await chunk_service.get_upload_status(db, upload_session_id)
+        
+        # Agregar información del recording
+        upload_status.update({
+            "recording_id": recording_id,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        
+        api_logger.info(
+            "Estado de upload consultado",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            estado=upload_status["estado"],
+            progress=upload_status["progress_percentage"]
+        )
+        
+        return upload_status
+        
+    except Exception as e:
+        api_logger.error(
+            "Error consultando estado de upload",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error consultando estado: {str(e)}"
+        )
+
+
+@router.post("/{recording_id}/recovery")
+async def recover_upload_session(
+    recording_id: str,
+    upload_session_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, Any]:
+    """
+    Recuperar información para reanudar upload interrumpido.
+    Proporciona lista de chunks faltantes y configuración.
+    """
+    try:
+        # Obtener estado detallado
+        upload_status = await chunk_service.get_upload_status(db, upload_session_id)
+        
+        # Verificar si la sesión puede ser recuperada
+        if upload_status["estado"] in ["completado", "cancelado"]:
+            return {
+                "recovery_possible": False,
+                "message": f"Sesión {upload_status['estado']}, no requiere recovery",
+                "current_status": upload_status["estado"]
+            }
+        
+        if upload_status["is_expired"]:
+            return {
+                "recovery_possible": False,
+                "message": "Sesión expirada, crear nueva sesión",
+                "expired_at": upload_status["expires_at"]
+            }
+        
+        # Información para recovery
+        recovery_info = {
+            "recovery_possible": True,
+            "recording_id": recording_id,
+            "upload_session_id": upload_session_id,
+            "chunks_missing": upload_status["missing_chunks"],
+            "chunks_received": upload_status["chunks_received"],
+            "total_chunks_expected": upload_status["total_chunks_expected"],
+            "progress_percentage": upload_status["progress_percentage"],
+            "bytes_uploaded": upload_status["bytes_uploaded"],
+            "file_size_total": upload_status["file_size_total"],
+            "chunk_upload_url": f"/api/v1/recordings/{recording_id}/chunk",
+            "complete_url": f"/api/v1/recordings/{recording_id}/complete",
+            "expires_at": upload_status["expires_at"],
+            "recommendations": []
+        }
+        
+        # Generar recomendaciones para recovery
+        if len(upload_status["missing_chunks"]) > 0:
+            recovery_info["recommendations"].append({
+                "type": "upload_missing_chunks",
+                "message": f"Subir {len(upload_status['missing_chunks'])} chunks faltantes",
+                "missing_chunks": upload_status["missing_chunks"][:10]  # Primeros 10 para no saturar
+            })
+        
+        if upload_status["progress_percentage"] > 90:
+            recovery_info["recommendations"].append({
+                "type": "nearly_complete",
+                "message": "Upload casi completo, verificar últimos chunks",
+                "progress": upload_status["progress_percentage"]
+            })
+        
+        api_logger.info(
+            "Recovery info generada",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            missing_chunks_count=len(upload_status["missing_chunks"]),
+            progress=upload_status["progress_percentage"]
+        )
+        
+        return recovery_info
+        
+    except Exception as e:
+        api_logger.error(
+            "Error en recovery de upload",
+            recording_id=recording_id,
+            upload_session_id=upload_session_id,
+            error=str(e)
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error en recovery: {str(e)}"
+        )
 
 
 @router.get("/{recording_id}/status", response_model=RecordingStatus)

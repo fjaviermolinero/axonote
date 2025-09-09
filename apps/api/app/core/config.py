@@ -162,6 +162,7 @@ class Settings(BaseSettings):
     
     RATE_LIMIT_PER_MINUTE: int = 60
     MAX_UPLOAD_SIZE_MB: int = 500
+    MAX_CHUNK_SIZE_MB: int = 10
     ALLOWED_AUDIO_FORMATS: List[str] = ["wav", "mp3", "m4a", "flac", "ogg"]
     ALLOWED_IMAGE_FORMATS: List[str] = ["jpg", "jpeg", "png", "webp"]
     

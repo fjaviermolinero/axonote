@@ -142,6 +142,7 @@ class ClassSession(BaseModel):
     sources = relationship("Source", back_populates="class_session", cascade="all, delete-orphan")
     terms = relationship("Term", back_populates="class_session", cascade="all, delete-orphan")
     cards = relationship("Card", back_populates="class_session", cascade="all, delete-orphan")
+    upload_sessions = relationship("UploadSession", back_populates="class_session", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
         return (
