@@ -102,14 +102,45 @@ class Settings(BaseSettings):
     LLM_PROVIDER: str = "lmstudio"  # lmstudio | ollama | openai
     
     # Local LLM (LM Studio / Ollama)
-    LMSTUDIO_BASE_URL: str = "http://lmstudio:1234/v1"
+    LMSTUDIO_BASE_URL: str = "http://lmstudio:1234"
     OLLAMA_BASE_URL: str = "http://ollama:11434"
-    LOCAL_MODEL_NAME: str = "Qwen2.5-14B-Instruct-Q4_K_M"
+    LLM_MODEL_NAME: str = "qwen2.5-14b-instruct"
+    LLM_MAX_TOKENS: int = 4000
+    LLM_TEMPERATURE: float = 0.1
     
     # OpenAI (fallback remoto)
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o-mini"
-    MAX_REMOTE_COST_EUR: float = 25.0
+    OPENAI_MAX_MONTHLY_COST: float = 25.0
+    
+    # ==============================================
+    # POST-PROCESAMIENTO Y ANÁLISIS
+    # ==============================================
+    
+    # Corrección ASR
+    ENABLE_ASR_CORRECTION: bool = True
+    ASR_CONFIDENCE_THRESHOLD: float = 0.8
+    MEDICAL_DICT_PATH: str = "data/medical_dict_it.json"
+    
+    # NER Médico
+    ENABLE_MEDICAL_NER: bool = True
+    NER_CONFIDENCE_THRESHOLD: float = 0.8
+    NER_INCLUDE_DEFINITIONS: bool = True
+    
+    # Análisis de estructura
+    ENABLE_STRUCTURE_ANALYSIS: bool = True
+    STRUCTURE_MIN_SEGMENT_SEC: int = 30
+    
+    # Calidad y validación
+    QUALITY_MIN_COHERENCE: float = 0.7
+    QUALITY_MIN_COMPLETENESS: float = 0.6
+    AUTO_REVIEW_THRESHOLD: float = 0.8
+    ENABLE_QUALITY_GATES: bool = True
+    
+    # Procesamiento
+    MAX_PROCESSING_TIME_MINUTES: int = 120
+    ENABLE_AUDIO_NORMALIZATION: bool = True
+    PROCESSING_CHUNK_SIZE_SEC: int = 600
     
     # ==============================================
     # ASR Y DIARIZACIÓN

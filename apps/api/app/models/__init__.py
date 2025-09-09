@@ -12,6 +12,9 @@ from .upload_session import UploadSession, ChunkUpload
 from .processing_job import ProcessingJob
 from .transcription_result import TranscriptionResult
 from .diarization_result import DiarizationResult
+from .llm_analysis_result import LLMAnalysisResult
+from .post_processing_result import PostProcessingResult
+from .medical_terminology import MedicalTerminology
 
 __all__ = [
     "ClassSession",
@@ -23,5 +26,8 @@ __all__ = [
     "ChunkUpload",
     "ProcessingJob",
     "TranscriptionResult",
-    "DiarizationResult"
+    "DiarizationResult",
+    "LLMAnalysisResult",
+    "PostProcessingResult",
+    "MedicalTerminology"
 ]

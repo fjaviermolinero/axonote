@@ -49,7 +49,7 @@ httpx = "^0.25.2"
 factory-boy = "^3.3.0"
 
 [tool.poetry.group.ml.dependencies]
-# Librerías de Machine Learning para Fase 4
+# Librerías de Machine Learning para Fase 4 y 5
 faster-whisper = "^0.9.0"
 whisperx = "^3.1.1"
 pyannote-audio = "^3.1.1"
@@ -63,6 +63,13 @@ numba = "^0.58.0"
 numpy = "^1.24.0"
 soundfile = "^0.12.1"
 ffmpeg-python = "^0.2.0"
+
+# Fase 5: Post-procesamiento y LLM
+openai = "^1.3.0"
+ahocorasick = "^2.0.0"
+regex = "^2023.10.3"
+spacy = "^3.7.0"
+nltk = "^3.8.1"
 
 [build-system]
 requires = ["poetry-core"]

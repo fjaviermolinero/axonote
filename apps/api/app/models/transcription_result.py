@@ -240,7 +240,9 @@ class TranscriptionResult(BaseModel):
     )
     
     # Relaciones
-    # processing_job = relationship("ProcessingJob", back_populates="transcription_result")
+    processing_job = relationship("ProcessingJob", back_populates="transcription_results")
+    llm_analysis_results = relationship("LLMAnalysisResult", back_populates="transcription_result")
+    post_processing_results = relationship("PostProcessingResult", back_populates="transcription_result")
     
     def __repr__(self) -> str:
         return (

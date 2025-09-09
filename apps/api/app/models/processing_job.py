@@ -367,3 +367,9 @@ class ProcessingJob(BaseModel):
         tiempo_restante = max(0, tiempo_total_estimado - tiempo_transcurrido)
         
         return int(tiempo_restante)
+    
+    # Relaciones con otros modelos
+    transcription_results = relationship("TranscriptionResult", back_populates="processing_job")
+    diarization_results = relationship("DiarizationResult", back_populates="processing_job") 
+    llm_analysis_results = relationship("LLMAnalysisResult", back_populates="processing_job")
+    post_processing_results = relationship("PostProcessingResult", back_populates="processing_job")
