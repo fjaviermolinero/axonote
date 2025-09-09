@@ -124,7 +124,7 @@ class Settings(BaseSettings):
     # Diarización
     USE_DIARIZATION: bool = True
     DIARIZATION_MODEL: str = "pyannote/speaker-diarization-3.1"
-    HF_TOKEN: Optional[str] = None  # Hugging Face token
+    HF_TOKEN: Optional[str] = None  # Hugging Face token para pyannote
     
     # ==============================================
     # OCR CONFIGURATION

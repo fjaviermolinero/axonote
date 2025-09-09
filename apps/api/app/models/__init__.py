@@ -9,6 +9,9 @@ from .source import Source
 from .term import Term
 from .card import Card
 from .upload_session import UploadSession, ChunkUpload
+from .processing_job import ProcessingJob
+from .transcription_result import TranscriptionResult
+from .diarization_result import DiarizationResult
 
 __all__ = [
     "ClassSession",
@@ -17,5 +20,8 @@ __all__ = [
     "Term",
     "Card",
     "UploadSession",
-    "ChunkUpload"
+    "ChunkUpload",
+    "ProcessingJob",
+    "TranscriptionResult",
+    "DiarizationResult"
 ]

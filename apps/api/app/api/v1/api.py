@@ -5,7 +5,7 @@ Agrupa todos los endpoints de la versión 1 de la API.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health, settings, recordings
+from app.api.v1.endpoints import health, settings, recordings, processing
 
 # Router principal de API v1
 api_router = APIRouter()
@@ -27,4 +27,9 @@ api_router.include_router(
     recordings.router,
     prefix="/recordings",
     tags=["recordings"]
+)
+
+api_router.include_router(
+    processing.router,
+    tags=["processing"]
 )

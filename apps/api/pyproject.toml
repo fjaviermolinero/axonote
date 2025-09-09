@@ -49,12 +49,20 @@ httpx = "^0.25.2"
 factory-boy = "^3.3.0"
 
 [tool.poetry.group.ml.dependencies]
-# Estas dependencias se añadirán en Fase 4
-# faster-whisper = "^0.9.0"
-# whisperx = "^3.1.1"
-# pyannote-audio = "^3.1.1"
-# torch = "^2.1.0"
-# torchaudio = "^2.1.0"
+# Librerías de Machine Learning para Fase 4
+faster-whisper = "^0.9.0"
+whisperx = "^3.1.1"
+pyannote-audio = "^3.1.1"
+torch = "^2.1.0"
+torchaudio = "^2.1.0"
+transformers = "^4.35.0"
+librosa = "^0.10.1"
+scipy = "^1.11.0"
+scikit-learn = "^1.3.0"
+numba = "^0.58.0"
+numpy = "^1.24.0"
+soundfile = "^0.12.1"
+ffmpeg-python = "^0.2.0"
 
 [build-system]
 requires = ["poetry-core"]

@@ -211,10 +211,13 @@ docker-compose logs -f api --tail=100
 - [ ] Progress tracking
 - [ ] Recuperación de errores
 
-### **🗣️ Fase 4** - ASR + Diarización
-- [ ] Integración faster-whisper
-- [ ] Diarización con pyannote
-- [ ] Optimización CUDA
+### **🗣️ Fase 4** - ASR + Diarización ✅
+- [x] Integración faster-whisper con Whisper large-v3
+- [x] Diarización con pyannote-audio v3.1
+- [x] Optimización CUDA para RTX 4090
+- [x] Pipeline completo de procesamiento asíncrono
+- [x] APIs REST para control y monitoreo
+- [x] Clasificación automática profesor/alumnos
 
 ### **🧠 Fases 5-12** - IA Avanzada, Integración Notion, Exportación, etc.
 
