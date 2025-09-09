@@ -143,6 +143,64 @@ class Settings(BaseSettings):
     PROCESSING_CHUNK_SIZE_SEC: int = 600
     
     # ==============================================
+    # RESEARCH Y FUENTES MÉDICAS - FASE 6
+    # ==============================================
+    
+    # Configuración general de research
+    ENABLE_MEDICAL_RESEARCH: bool = True
+    RESEARCH_DEFAULT_PRESET: str = "COMPREHENSIVE"
+    RESEARCH_DEFAULT_LANGUAGE: str = "it"
+    RESEARCH_MAX_CONCURRENT_JOBS: int = 3
+    RESEARCH_TIMEOUT_MINUTES: int = 30
+    
+    # APIs oficiales
+    NCBI_API_KEY: Optional[str] = None
+    NCBI_EMAIL: str = "research@axonote.com"
+    WHO_API_KEY: Optional[str] = None
+    NIH_API_KEY: Optional[str] = None
+    
+    # Rate limiting
+    PUBMED_REQUESTS_PER_SECOND: float = 3.0
+    WHO_REQUESTS_PER_SECOND: float = 2.0
+    GENERAL_REQUESTS_PER_SECOND: float = 5.0
+    
+    # Cache configuration
+    RESEARCH_CACHE_ENABLED: bool = True
+    RESEARCH_CACHE_TTL_HOURS: int = 168  # 7 días
+    RESEARCH_CACHE_MAX_SIZE_MB: int = 1024  # 1GB
+    RESEARCH_CACHE_CLEANUP_INTERVAL_HOURS: int = 24
+    
+    # Validación de contenido
+    CONTENT_VALIDATION_ENABLED: bool = True
+    MIN_RELEVANCE_SCORE: float = 0.6
+    MIN_AUTHORITY_SCORE: float = 0.7
+    ENABLE_FACT_CHECKING: bool = True
+    ENABLE_PEER_REVIEW_PRIORITY: bool = True
+    
+    # Fuentes específicas
+    ENABLE_PUBMED_SEARCH: bool = True
+    ENABLE_WHO_SEARCH: bool = True
+    ENABLE_NIH_SEARCH: bool = True
+    ENABLE_MEDLINEPLUS_SEARCH: bool = True
+    ENABLE_ITALIAN_SOURCES: bool = True
+    ENABLE_WEB_SCRAPING: bool = False  # Deshabilitado por defecto
+    
+    # Límites de búsqueda
+    MAX_SOURCES_PER_TERM: int = 5
+    MAX_SEARCH_RESULTS: int = 20
+    SEARCH_TIMEOUT_SECONDS: int = 30
+    
+    # Idiomas y localización
+    SUPPORTED_RESEARCH_LANGUAGES: List[str] = ["it", "en", "es"]
+    TRANSLATION_SERVICE_ENABLED: bool = True
+    ITALIAN_SOURCES_PRIORITY: bool = True
+    
+    # Métricas y monitoring
+    RESEARCH_METRICS_ENABLED: bool = True
+    RESEARCH_PERFORMANCE_LOGGING: bool = True
+    RESEARCH_ERROR_REPORTING: bool = True
+    
+    # ==============================================
     # ASR Y DIARIZACIÓN
     # ==============================================
     

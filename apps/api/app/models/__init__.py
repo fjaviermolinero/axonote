@@ -15,6 +15,10 @@ from .diarization_result import DiarizationResult
 from .llm_analysis_result import LLMAnalysisResult
 from .post_processing_result import PostProcessingResult
 from .medical_terminology import MedicalTerminology
+from .research_job import ResearchJob
+from .research_result import ResearchResult
+from .medical_source import MedicalSource
+from .source_cache import SourceCache
 
 __all__ = [
     "ClassSession",
@@ -29,5 +33,9 @@ __all__ = [
     "DiarizationResult",
     "LLMAnalysisResult",
     "PostProcessingResult",
-    "MedicalTerminology"
+    "MedicalTerminology",
+    "ResearchJob",
+    "ResearchResult",
+    "MedicalSource",
+    "SourceCache"
 ]

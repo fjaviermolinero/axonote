@@ -5,7 +5,7 @@ Agrupa todos los endpoints de la versión 1 de la API.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health, settings, recordings, processing, llm_analysis
+from app.api.v1.endpoints import health, settings, recordings, processing, llm_analysis, research
 
 # Router principal de API v1
 api_router = APIRouter()
@@ -38,4 +38,9 @@ api_router.include_router(
     llm_analysis.router,
     prefix="/llm-analysis",
     tags=["llm-analysis"]
+)
+
+api_router.include_router(
+    research.router,
+    tags=["research"]
 )

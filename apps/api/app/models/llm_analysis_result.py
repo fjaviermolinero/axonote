@@ -148,6 +148,7 @@ class LLMAnalysisResult(BaseModel):
     # Relaciones
     processing_job = relationship("ProcessingJob", back_populates="llm_analysis_results")
     transcription_result = relationship("TranscriptionResult", back_populates="llm_analysis_results")
+    research_jobs = relationship("ResearchJob", back_populates="llm_analysis", cascade="all, delete-orphan")
     
     def __repr__(self) -> str:
         return (
