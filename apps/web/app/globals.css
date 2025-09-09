@@ -1,0 +1,151 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 84% 4.9%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 84% 4.9%;
+    --destructive: 0 72.2% 50.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 84% 4.9%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 94.1%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+/* Animaciones personalizadas para aplicación médica */
+@layer utilities {
+  .animate-recording {
+    animation: recording 2s ease-in-out infinite;
+  }
+  
+  @keyframes recording {
+    0%, 100% { 
+      background-color: #ef4444;
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    }
+    50% { 
+      background-color: #dc2626;
+      box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+    }
+  }
+  
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  .text-gradient {
+    background: linear-gradient(45deg, #3b82f6, #8b5cf6);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+}
+
+/* Estilos para componentes médicos */
+.medical-card {
+  @apply bg-white rounded-2xl shadow-lg border border-gray-200 p-6 transition-all duration-200 hover:shadow-xl hover:scale-[1.02];
+}
+
+.medical-badge {
+  @apply inline-flex items-center rounded-full px-3 py-1 text-sm font-medium;
+}
+
+.medical-badge.success {
+  @apply bg-green-100 text-green-800;
+}
+
+.medical-badge.warning {
+  @apply bg-yellow-100 text-yellow-800;
+}
+
+.medical-badge.error {
+  @apply bg-red-100 text-red-800;
+}
+
+.medical-badge.info {
+  @apply bg-blue-100 text-blue-800;
+}
+
+/* Layout responsivo optimizado para móviles */
+.mobile-container {
+  @apply max-w-md mx-auto px-4 py-6;
+}
+
+.mobile-grid {
+  @apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+}
+
+/* Indicador de sincronización */
+.sync-indicator {
+  @apply fixed top-4 right-4 z-50 flex items-center space-x-2 bg-white/90 backdrop-blur-sm rounded-full px-3 py-2 shadow-lg border;
+}
+
+.sync-indicator.syncing {
+  @apply bg-blue-50 border-blue-200;
+}
+
+.sync-indicator.error {
+  @apply bg-red-50 border-red-200;
+}
+
+/* Estilos para grabación */
+.recording-controls {
+  @apply fixed bottom-6 left-1/2 transform -translate-x-1/2 z-40;
+}
+
+.waveform-container {
+  @apply w-full h-16 bg-gray-100 rounded-lg overflow-hidden relative;
+}
+
+/* Accesibilidad mejorada */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2;
+}
+
+/* Estilos para PWA */
+.pwa-install-banner {
+  @apply fixed bottom-0 left-0 right-0 bg-primary-600 text-white p-4 z-50 transform transition-transform duration-300;
+}
+
+.pwa-install-banner.hidden {
+  @apply translate-y-full;
+}
