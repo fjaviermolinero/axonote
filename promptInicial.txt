@@ -1,0 +1,301 @@
+ROLE
+Eres un “Principal Engineer” y generador de código. Debes construir una plataforma PWA para grabar clases universitarias en un idioma distinto al español (Medicina), transcribir con Whisper en GPU local, separar Docente/Alumnos, resumir en español con citas breves en el idioma de origen, ampliar con investigación en fuentes médicas oficiales, crear glosario, flashcards, autoexamen y TTS offline, y sincronizar todo a Notion. El sistema es “local-first”, con privacidad on-prem, y solo usa OpenAI de forma opcional y limitada por presupuesto (fallback a LLM local).
+
+DECISIONES Y NO NEGOCIABLES
+- Privacidad: audio/transcripciones crudas quedan en servidor propio (MinIO/Nextcloud). Nada de audio a la nube.
+- Stack backend: **Python FastAPI** + **Celery** (Redis) + **SQLAlchemy + Alembic** + **PostgreSQL** + **MinIO**.
+- ASR: **faster-whisper** + **WhisperX** (alineación palabra) en GPU (RTX 4090).
+- Diarización: **pyannote.audio 3.1** (Docente vs Alumnos).
+- OCR: **Tesseract** (CLI) para pizarra/diapositivas (capturas desde el front).
+- LLM local por defecto: **Qwen2.5-14B-Instruct** (vía **LM Studio** u **Ollama**, OpenAI-compatible).
+- LLM remoto opcional (OpenAI): desactivado por defecto; límite mensual ≤ 25 €; usar solo en fragmentos difíciles/estilística.
+- Frontend: **Next.js + TypeScript** (PWA), **Tailwind**, **Zustand**; MediaRecorder + VAD + colas offline (IndexedDB).
+- Integración Notion: vía **Notion SDK** (Python) desde backend.
+- Exportables: **XLSX/ODS** (xlsxwriter/pyexcel-ods), y TTS **Piper** offline (ES/IT).
+- Fuentes médicas: whitelist (WHO/OMS, ECDC, CDC, NIH/PubMed, NICE, EMA, sociedades serias, Cochrane/Revistas Q1). Rechazar lo demás por defecto.
+- Idioma de salida: **español** con **citas breves en idioma origen** donde aporten valor.
+- Calendario CalDAV/ICS: **fuera del MVP** (posponer). MVP con selector manual + favoritos.
+- Entidad “Profesor”: **opcional y autogestionada en background**; UI mantiene texto libre.
+
+FEATURE FLAGS (en .env / tabla settings)
+- FEATURE_PROFESSOR_ENTITY=true (auto-crear entidad profesor; si false → se queda texto libre)
+- FEATURE_STRICT_JSON=false (validador tolerante + “repair step”)
+- FEATURE_REMOTE_TURBO=false (usa OpenAI sólo si true y dentro del presupuesto)
+- FEATURE_CALENDAR_INTEGRATION=false (CalDAV/ICS pospuesto)
+- FEATURE_OCR=true (OCR pizarra/diapositivas)
+- FEATURE_TTS=true
+- FEATURE_BATCH_REPROCESS=true
+
+ESTÁNDARES DE CALIDAD
+- Python: 3.11+, **ruff + black + mypy (strict)**, pytest, coverage≥85%.
+- TS/React: ESLint (airbnb + @next), TypeScript strict, Jest/RTL + Playwright e2e.
+- Commits: **Conventional Commits**. CI: GitHub Actions (lint, test, build, docker).
+- Seguridad: 12-factor, secretos en .env (no commitear), cabeceras seguras, CORS minimal, límites de tamaño, rate limiting.
+
+ESTRUCTURA DE REPOSITORIO
+/
+├─ apps/
+│  ├─ api/                  # FastAPI app
+│  │  ├─ app/
+│  │  │  ├─ main.py
+│  │  │  ├─ api/ (routers)
+│  │  │  ├─ core/ (config, security, logging)
+│  │  │  ├─ models/ (SQLAlchemy)
+│  │  │  ├─ schemas/ (pydantic)
+│  │  │  ├─ services/ (notion, minio, llm, asr, ocr, tts)
+│  │  │  ├─ tasks/ (celery: asr, diarization, nlp, export, notion)
+│  │  │  └─ workers/ (celery entrypoints)
+│  │  ├─ alembic/ (migrations)
+│  │  └─ pyproject.toml
+│  └─ web/                  # Next.js PWA
+│     ├─ app/ (Next 14)
+│     ├─ components/
+│     ├─ lib/ (api client, idb queues)
+│     ├─ public/ (icons, manifest.json, sw.js)
+│     ├─ tailwind.config.ts
+│     └─ package.json
+├─ docker/
+│  ├─ api.Dockerfile
+│  ├─ worker.Dockerfile
+│  ├─ web.Dockerfile
+│  └─ tesseract.Dockerfile (opcional si no usas paquete base)
+├─ deploy/
+│  ├─ docker-compose.dev.yml
+│  └─ docker-compose.gpu.yml
+├─ scripts/
+│  ├─ create_notion_dbs.py
+│  ├─ seed_terms.py
+│  └─ export_xlsx.py
+├─ .env.example
+├─ Makefile
+└─ README.md
+
+VARIABLES DE ENTORNO (.env.example)
+# FastAPI
+APP_ENV=dev
+SECRET_KEY=change_me
+API_PORT=8000
+CORS_ORIGINS=http://localhost:3000
+
+# DB/Redis
+DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/medclass
+REDIS_URL=redis://redis:6379/0
+
+# MinIO / Nextcloud (elige uno; usa MINIO por defecto)
+STORAGE_BACKEND=minio
+MINIO_ENDPOINT=minio:9000
+MINIO_ACCESS_KEY=minioadmin
+MINIO_SECRET_KEY=minioadmin
+MINIO_BUCKET=recordings
+MINIO_SECURE=false
+
+# Notion
+NOTION_TOKEN=secret_xxx
+NOTION_DB_CLASSES=
+NOTION_DB_SOURCES=
+NOTION_DB_TERMS=
+NOTION_DB_CARDS=
+
+# LLM
+LLM_PROVIDER=lmstudio            # lmstudio | ollama | openai
+LMSTUDIO_BASE_URL=http://lmstudio:1234/v1
+OLLAMA_BASE_URL=http://ollama:11434
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+LOCAL_MODEL_NAME=Qwen2.5-14B-Instruct-Q4_K_M
+MAX_REMOTE_COST_EUR=25
+
+# ASR/DIARIZATION
+WHISPER_MODEL=large-v3
+WHISPER_DEVICE=cuda
+USE_WHISPERX=true
+HF_TOKEN= # (para pyannote si requiere auth)
+
+# OCR
+TESSERACT_LANG=ita+eng
+TESSDATA_PREFIX=/usr/share/tesseract-ocr/4.00/tessdata
+
+# TTS
+PIPER_VOICE_ES=es-ES-...   # nombre del modelo
+PIPER_VOICE_IT=it-IT-...
+PIPER_BIN=/usr/local/bin/piper
+
+# Feature flags
+FEATURE_PROFESSOR_ENTITY=true
+FEATURE_STRICT_JSON=false
+FEATURE_REMOTE_TURBO=false
+FEATURE_CALENDAR_INTEGRATION=false
+FEATURE_OCR=true
+FEATURE_TTS=true
+FEATURE_BATCH_REPROCESS=true
+
+DOCKER COMPOSE (generar ambos)
+- docker-compose.dev.yml (sin GPU, para desarrollo frontend/backend)
+- docker-compose.gpu.yml (con servicios GPU para ASR/diarización/LLM local)
+Incluir servicios: api, worker, redis, db, minio, web, lmstudio (u ollama), (opcional) piper, (opcional) tesseract. En gpu.yml añadir:
+  deploy/resources/devices o `gpus: all` y variables NVIDIA.
+
+CONTRATO DE API (MVP)
+POST /api/recordings            -> inicia sesión y devuelve {recordingId, uploadUrls?} (puede ser “simple chunks”: /api/recordings/:id/chunk?n=)
+POST /api/recordings/:id/chunk  -> sube chunk binario; headers: Content-Range opcional
+POST /api/recordings/:id/complete -> cierra subida; encola pipeline ASR
+GET  /api/classes/:id           -> estado y resultados (resumen, ampliación, glosario, Q&A, fuentes, métricas)
+POST /api/export/:id?format=xlsx|ods -> fichero exportable
+POST /api/notion/setup          -> crea DBs si faltan y guarda IDs
+POST /api/settings              -> actualiza flags/whitelist/idiomas/tts voice
+POST /api/notes/:id/memo        -> sube micro-memo (audio 10s) y lo indexa con timestamp
+POST /api/images/:id            -> sube captura pizarra/diapositiva; cola OCR
+
+ESQUEMA DE DATOS (SQLAlchemy)
+ClassSession(
+  id UUID PK, fecha date, asignatura str, tema str, profesor_text str,
+  profesor_id FK nullable,
+  audio_url str, duracion_sec int,
+  diarizacion_json JSONB, transcripcion_md TEXT,
+  resumen_md TEXT, ampliacion_md TEXT,
+  glosario_json JSONB, preguntas_json JSONB, tarjetas_json JSONB,
+  confianza_asr float, confianza_llm float,
+  estado_pipeline ENUM('uploaded','asr','nlp','notion','done','error'),
+  notion_page_id str nullable,
+  created_at, updated_at
+)
+
+Professor(id, nombre, alias_json, slug)  # crear sólo si FEATURE_PROFESSOR_ENTITY=true
+Source(id, class_id FK, titulo, url, editor, tipo, anio, doi_pmid, anchor_id)
+Card(id, class_id FK, front, back, tipo, dificultad, proximo_repaso date)
+Term(id, class_id FK, it, es, definicion_es, ejemplo_it, sinonimos_json)
+
+NOTION (si no existen, crear DBs con estas propiedades)
+- Clases: Fecha(date), Asignatura(select), Tema(title), Audio(file/url), Confianza ASR(number), Resumen(rich text), Notas ampliadas(rich text); Relaciones: Fuentes, Términos, Tarjetas.
+- Fuentes: Título, URL, Editor, Año, Tipo, Clase(relation), DOI/PMID.
+- Términos: Idioma origen, Español, Definición, Ejemplo(IT), Clase(relation).
+- Tarjetas: Front, Back, Tipo, Dificultad, Próximo repaso, Clase(relation).
+
+PROMPTS LLM (núcleo JSON + ampliación libre)
+Tarea 1 (Resumen IT→ES con citas IT, salida JSON núcleo):
+{
+ "introduccion": "...",
+ "puntos_clave": ["..."],
+ "glosario": [{"it":"...", "es":"...", "definicion_es":"...", "ejemplo_it":"..."}],
+ "preguntas_autoexamen": ["..."],
+ "timestamp_map": [{"mm:ss":"seccion/punto"}],
+ "v": 1,
+ "extensions": {}
+}
+Tarea 2 (Ampliación con investigación, salida libre Markdown + citas ancladas):
+- Responde en Markdown. Por cada párrafo inserta [^id] y al final genera un bloque “Referencias” con entradas estilo Vancouver/AMA simplificado: id. Título — Editor; Año. URL (DOI/PMID).
+- Usa solo dominios whitelist. Rechaza lo demás.
+- Añade pitfalls y diferencial cuando aplique, + “limitaciones” y “última revisión (ISO)”.
+Tarea 3 (Normalización terminológica):
+- Entrada: transcripción + caché inter-clase; salida: transcripción normalizada y lista de términos dudosos “?”.
+Parser de reparación: si falta JSON, intentar extraer con heurísticas y rellenar valores seguros; marcar needs_review=true.
+
+PIPELINE (Celery tasks)
+1) ingest_audio -> normaliza con ffmpeg (16k mono), almacena en MinIO.
+2) asr_transcribe -> faster-whisper; si USE_WHISPERX=true, alinea palabra.
+3) diarize -> pyannote (docente vs alumnos). Sincroniza segments.
+4) postprocess -> corrección Aho-Corasick con diccionario médico IT; marcar dudas “?”.
+5) nlp_summarize -> LLM local (Qwen 2.5 14B) para Tarea 1.
+6) research_expand -> crawler con whitelist; sintetiza Tarea 2 (Markdown + citas).
+7) build_cards -> genera tarjetas (cloze/QA) y Q&A desde puntos clave/glosario.
+8) tts_summary -> genera audio del resumen con Piper.
+9) push_notion -> crea/actualiza página; relaciones y bloques; incrusta audio.
+10) export_tabular -> xlsx/ods si fue solicitado.
+11) batch_reprocess -> reprocesa clases viejas cuando cambie diccionario/prompts.
+
+FRONTEND (Next.js PWA)
+- Páginas: / (Clases), /grabar, /ajustes.
+- Grabar: MediaRecorder + VAD (Web Worker); botones grandes: “Idea clave”, “No entendí”, “Capturar diapositiva”.
+- Micro-memos: grabaciones 10s; guardar con timestamp.
+- Colas offline: IndexedDB para chunks de audio, imágenes y memos; reintentos exponenciales.
+- UI de estado: progreso por etapa (ASR, Diarización, NLP, Notion).
+- Plantilla Notion espejo en UI: Resumen, Puntos clave, Ampliación (citas), Toggles Glosario/Autoevaluación/Transcripción, Bibliografía.
+- Accesibilidad: modo oscuro, controles grandes, TTS play del resumen (si disponible).
+- Sin calendario en MVP: selector manual de Asignatura/Tema + favoritos y duplicar último.
+
+PRUEBAS (criterios de aceptación principales)
+- Subida robusta: un audio de 45–60 min en chunks se sube pese a desconexión temporal; reintentos OK.
+- ASR en GPU: transcribe con WER razonable; produce timestamps y diarización coherente (al menos 2 speakers).
+- LLM local: genera JSON núcleo + ampliación Markdown; si falla JSON, el “repair step” produce estructura mínimamente válida.
+- Notion: páginas se crean cuando faltan DBs; relaciones y bloques quedan correctos; plantillas con toggles.
+- Export: genera XLSX con pestañas Resumen, Ampliación, Glosario, Flashcards, Q&A, Fuentes.
+- TTS: archivo .wav/.ogg del resumen disponible y reproducible desde UI.
+- Seguridad: no se exfiltra audio ni transcripción cruda; .env no se commitea; CORS restringido a web origin.
+- Coste remoto: si FEATURE_REMOTE_TURBO=true, se usa OpenAI solo en fragmentos difíciles y se respeta MAX_REMOTE_COST_EUR.
+
+FASES DE CONSTRUCCIÓN (genera código por fases con PRs pequeños)
+
+Fase 0 — Infra
+- Genera repo, README, EditorConfig, pre-commit, ruff/black/mypy, ESLint/Prettier, CI GitHub Actions, devcontainer opcional.
+- Crea .env.example y Makefile (“make up”, “make down”, “make logs”, “make format”, “make test”).
+- Esqueleto docker-compose.dev.yml (api, worker, db, redis, minio, web).
+
+Fase 1 — Backend base (FastAPI)
+- main.py con salud y /api/settings GET/POST.
+- Config core (pydantic-settings), logging estructurado, middlewares (CORS, GZip, rate limit).
+- DB PostgreSQL + SQLAlchemy + Alembic; modelos ClassSession/Source/Term/Card/Professor.
+- Repos y servicios (minio, notion, llm, asr stub, ocr stub, tts stub).
+- Celery + tareas dummy; cola y monitor básico (Flower opcional).
+
+Fase 2 — Frontend PWA
+- Next.js app, Tailwind, Zustand, manifest.json, service worker básico, IndexedDB helper.
+- Páginas: /grabar (MediaRecorder + colas + botones de anotación); / (lista clases); /ajustes (flags, voces TTS).
+- Cliente API TS con tipos.
+
+Fase 3 — Subida por chunks
+- Endpoint /api/recordings (init), /chunk, /complete; validación de rangos; almacenar en MinIO; metadatos.
+- UI: barra de progreso, recuperación tras refresh, reintentos.
+
+Fase 4 — ASR + Diarización
+- Integrar faster-whisper (CUDA) + WhisperX; tarea Celery que escribe transcripción cruda + word-timestamps.
+- Integrar pyannote; merge de segments con etiquetas Docente/Alumno_n.
+- Guardar confianza_asr y diarizacion_json.
+
+Fase 5 — Post-proceso + Caché léxica
+- Diccionario médico IT + Aho-Corasick; normalización y marcas “?”; glosario inter-clase acumulativo.
+
+Fase 6 — LLM Orquestador
+- Cliente LM Studio/Ollama (OpenAI-compatible) y fallback a OpenAI con budget guard.
+- Implementa Tarea 1 (JSON núcleo) y Tarea 2 (Markdown con citas).
+- Validador tolerante + repair step. Guardar confianza_llm y needs_review.
+
+Fase 7 — Research (whitelist)
+- Módulo “crawler/providers”: http simple + drivers opcionales (Brave/Bing via API si keys están).
+- Filtro de dominios, verificación de frescura (fecha), normalización de citas, anclaje por [^id].
+- Ensamblar ampliación (Markdown final) y listado de referencias.
+
+Fase 8 — Notion
+- Script scripts/create_notion_dbs.py para crear DBs y volcar IDs a .env si están vacíos.
+- Servicio push_notion: crea página de Clase, relaciones, bloques (Resumen, Ampliación con Referencias, Glosario, Autoevaluación, Transcripción en toggle, Bibliografía).
+
+Fase 9 — OCR + Micro-memos
+- Endpoint /api/images/:id; Tesseract (ita+eng); fusionar texto OCR en contexto (con etiqueta).
+- /api/notes/:id/memo para clips 10s vinculados a timestamps.
+
+Fase 10 — Export + TTS
+- XLSX/ODS: hojas Resumen/Ampliación/Glosario/Flashcards/Q&A/Fuentes.
+- Piper CLI para generar audio del resumen (ES/IT).
+
+Fase 11 — Dashboard y Métricas
+- KPIs: WER estimado, confianza_asr/llm, densidad de términos, tiempos por etapa, tokens/coste remoto.
+- Vista en / (web) con tarjetas por clase y estado pipeline.
+
+Fase 12 — Endurecer Seguridad & RGPD
+- Roles básicos (usuario único), límites de tamaño, antivirus opcional (clamav) para adjuntos, backups cifrados.
+- Pruebas e2e con Playwright (flujo grabar→procesar→notion→export).
+
+ENTREGABLES DE CADA FASE
+- Código compilable, tests verdes, docker compose funcionando con “make up”.
+- README actualizado con instrucciones.
+- PR pequeño con diff claro y checklist de aceptación.
+
+COMIENZA AHORA por la FASE 0. Genera:
+1) docker-compose.dev.yml mínimo con servicios: db (postgres), redis, minio, api, worker, web. Expón puertos 5432/6379/9000/9001/8000/3000.
+2) api/pyproject.toml (FastAPI, uvicorn, SQLAlchemy, Alembic, celery[redis], pydantic-settings, boto3/minio, httpx, python-dotenv, tenacity, loguru, pyahocorasick, fastapi-limiter, xlsxwriter, openpyxl, notion-client, pydub, soundfile; faster-whisper/whisperx y pyannote se añaden en Fase 4).
+3) web/package.json (Next 14, React 18, TypeScript, Tailwind, Zustand, idb, axios, jotai opcional).
+4) Makefile con objetivos: up, down, logs, format, test, migrate, alembic.
+5) .env.example con todas las vars definidas.
+6) README.md con pasos de arranque.
+
+FIN
+

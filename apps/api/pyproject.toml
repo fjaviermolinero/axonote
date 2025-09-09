@@ -1,0 +1,154 @@
+[tool.poetry]
+name = "axonote-api"
+version = "0.1.0"
+description = "Axonote - Plataforma PWA para grabación y transcripción de clases médicas"
+authors = ["Axonote Team"]
+readme = "README.md"
+packages = [{include = "app"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+sqlalchemy = "^2.0.23"
+alembic = "^1.12.1"
+psycopg = {extras = ["binary"], version = "^3.1.13"}
+celery = {extras = ["redis"], version = "^5.3.4"}
+redis = "^5.0.1"
+pydantic = "^2.5.0"
+pydantic-settings = "^2.1.0"
+boto3 = "^1.34.0"
+minio = "^7.2.0"
+httpx = "^0.25.2"
+python-dotenv = "^1.0.0"
+tenacity = "^8.2.3"
+loguru = "^0.7.2"
+pyahocorasick = "^2.0.0"
+fastapi-limiter = "^0.1.6"
+xlsxwriter = "^3.1.9"
+openpyxl = "^3.1.2"
+notion-client = "^2.2.1"
+pydub = "^0.25.1"
+soundfile = "^0.12.1"
+python-multipart = "^0.0.6"
+jinja2 = "^3.1.2"
+aiofiles = "^23.2.1"
+asyncpg = "^0.29.0"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-asyncio = "^0.21.1"
+pytest-cov = "^4.1.0"
+ruff = "^0.1.6"
+black = "^23.11.0"
+mypy = "^1.7.1"
+pre-commit = "^3.5.0"
+httpx = "^0.25.2"
+factory-boy = "^3.3.0"
+
+[tool.poetry.group.ml.dependencies]
+# Estas dependencias se añadirán en Fase 4
+# faster-whisper = "^0.9.0"
+# whisperx = "^3.1.1"
+# pyannote-audio = "^3.1.1"
+# torch = "^2.1.0"
+# torchaudio = "^2.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long, handled by black
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.11"
+check_untyped_defs = true
+disallow_any_generics = true
+disallow_incomplete_defs = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "celery.*",
+    "minio.*",
+    "pyahocorasick.*",
+    "pydub.*",
+    "soundfile.*",
+    "notion_client.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=85"
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "*/__init__.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
