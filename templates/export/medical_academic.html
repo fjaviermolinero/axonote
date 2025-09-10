@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ export_session.export_title or "Export Médico" }}</title>
+    
+    <style>
+        /* Estilos para PDF médico académico */
+        @page {
+            size: A4;
+            margin: 2.5cm 2cm 2.5cm 2cm;
+            @top-center {
+                content: "{{ contenido.metadatos.clase.asignatura }} - {{ contenido.metadatos.clase.tema[:50] }}...";
+                font-size: 10pt;
+                color: #666;
+            }
+            @bottom-center {
+                content: "Página " counter(page) " de " counter(pages);
+                font-size: 10pt;
+                color: #666;
+            }
+            @bottom-right {
+                content: "AxoNote - Generado el {{ fecha_generacion.strftime('%d/%m/%Y') }}";
+                font-size: 8pt;
+                color: #999;
+            }
+        }
+        
+        body {
+            font-family: 'Times New Roman', serif;
+            font-size: 12pt;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+        }
+        
+        h1 {
+            color: #2c5aa0;
+            font-size: 24pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 30pt;
+            border-bottom: 3pt solid #2c5aa0;
+            padding-bottom: 10pt;
+        }
+        
+        h2 {
+            color: #2c5aa0;
+            font-size: 18pt;
+            font-weight: bold;
+            margin-top: 30pt;
+            margin-bottom: 15pt;
+            border-left: 5pt solid #2c5aa0;
+            padding-left: 10pt;
+            page-break-after: avoid;
+        }
+        
+        h3 {
+            color: #4a6fa5;
+            font-size: 14pt;
+            font-weight: bold;
+            margin-top: 20pt;
+            margin-bottom: 10pt;
+            page-break-after: avoid;
+        }
+        
+        h4 {
+            color: #666;
+            font-size: 12pt;
+            font-weight: bold;
+            margin-top: 15pt;
+            margin-bottom: 8pt;
+            page-break-after: avoid;
+        }
+        
+        p {
+            margin-bottom: 12pt;
+            text-align: justify;
+            orphans: 2;
+            widows: 2;
+        }
+        
+        .header-info {
+            background: #f8f9fa;
+            border: 1pt solid #dee2e6;
+            border-radius: 5pt;
+            padding: 15pt;
+            margin-bottom: 25pt;
+        }
+        
+        .header-info table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        .header-info td {
+            padding: 5pt 10pt;
+            border-bottom: 1pt solid #e9ecef;
+        }
+        
+        .header-info td:first-child {
+            font-weight: bold;
+            width: 25%;
+            color: #2c5aa0;
+        }
+        
+        .content-section {
+            margin-bottom: 25pt;
+            page-break-inside: avoid;
+        }
+        
+        .transcription {
+            background: #f0f8ff;
+            border-left: 4pt solid #2c5aa0;
+            padding: 15pt;
+            margin: 15pt 0;
+            font-style: italic;
+        }
+        
+        .ocr-content {
+            background: #f5f5f5;
+            border: 1pt solid #ddd;
+            border-radius: 3pt;
+            padding: 12pt;
+            margin: 12pt 0;
+            font-family: 'Arial', sans-serif;
+            font-size: 11pt;
+        }
+        
+        .micro-memo {
+            background: #fff8dc;
+            border: 1pt solid #deb887;
+            border-radius: 5pt;
+            padding: 12pt;
+            margin: 10pt 0;
+            page-break-inside: avoid;
+        }
+        
+        .micro-memo .question {
+            font-weight: bold;
+            color: #8b4513;
+            margin-bottom: 8pt;
+        }
+        
+        .micro-memo .answer {
+            color: #2e7d32;
+            margin-bottom: 8pt;
+        }
+        
+        .micro-memo .explanation {
+            font-size: 10pt;
+            color: #666;
+            font-style: italic;
+        }
+        
+        .micro-memo .meta {
+            font-size: 9pt;
+            color: #999;
+            text-align: right;
+            margin-top: 8pt;
+            border-top: 1pt solid #deb887;
+            padding-top: 5pt;
+        }
+        
+        .research-section {
+            background: #f0fff0;
+            border: 1pt solid #90ee90;
+            border-radius: 3pt;
+            padding: 12pt;
+            margin: 12pt 0;
+        }
+        
+        .research-source {
+            font-weight: bold;
+            color: #006400;
+            margin-bottom: 8pt;
+        }
+        
+        .toc {
+            background: #f8f9fa;
+            border: 1pt solid #dee2e6;
+            border-radius: 5pt;
+            padding: 20pt;
+            margin-bottom: 30pt;
+            page-break-after: always;
+        }
+        
+        .toc h2 {
+            margin-top: 0;
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            margin-bottom: 8pt;
+            padding-left: 20pt;
+            text-indent: -20pt;
+        }
+        
+        .toc a {
+            text-decoration: none;
+            color: #2c5aa0;
+        }
+        
+        .stats-box {
+            background: #e3f2fd;
+            border: 1pt solid #90caf9;
+            border-radius: 5pt;
+            padding: 15pt;
+            margin: 20pt 0;
+            text-align: center;
+        }
+        
+        .disclaimer {
+            background: #fff3cd;
+            border: 1pt solid #ffeaa7;
+            border-radius: 3pt;
+            padding: 12pt;
+            margin: 20pt 0;
+            font-size: 10pt;
+            font-style: italic;
+            color: #856404;
+        }
+        
+        .confidence-score {
+            display: inline-block;
+            padding: 2pt 6pt;
+            border-radius: 3pt;
+            font-size: 9pt;
+            font-weight: bold;
+            color: white;
+        }
+        
+        .confidence-high { background-color: #28a745; }
+        .confidence-medium { background-color: #ffc107; color: #333; }
+        .confidence-low { background-color: #dc3545; }
+        
+        .page-break {
+            page-break-before: always;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header principal -->
+    <h1>{{ export_session.export_title or "Contenido Médico Académico" }}</h1>
+    
+    <!-- Información de la clase -->
+    <div class="header-info">
+        <table>
+            <tr>
+                <td>Asignatura:</td>
+                <td>{{ contenido.metadatos.clase.asignatura }}</td>
+            </tr>
+            <tr>
+                <td>Tema:</td>
+                <td>{{ contenido.metadatos.clase.tema }}</td>
+            </tr>
+            <tr>
+                <td>Fecha Clase:</td>
+                <td>{{ contenido.metadatos.clase.fecha }}</td>
+            </tr>
+            <tr>
+                <td>Profesor:</td>
+                <td>{{ contenido.metadatos.clase.profesor }}</td>
+            </tr>
+            <tr>
+                <td>Duración:</td>
+                <td>{{ (contenido.metadatos.clase.duracion / 60) | round(1) }} minutos</td>
+            </tr>
+            <tr>
+                <td>Formato Export:</td>
+                <td>{{ export_session.export_format.upper() }}</td>
+            </tr>
+            <tr>
+                <td>Generado:</td>
+                <td>{{ fecha_generacion.strftime('%d/%m/%Y %H:%M') }}</td>
+            </tr>
+        </table>
+    </div>
+    
+    <!-- Estadísticas del contenido -->
+    <div class="stats-box">
+        <h3>Resumen del Contenido</h3>
+        <p>
+            <strong>{{ contenido.total_elementos }}</strong> elementos totales | 
+            <strong>{{ contenido.transcripciones|length }}</strong> transcripciones | 
+            <strong>{{ contenido.ocr_results|length }}</strong> resultados OCR | 
+            <strong>{{ contenido.micro_memos|length }}</strong> micro-memos | 
+            <strong>{{ contenido.research_results|length }}</strong> referencias
+        </p>
+    </div>
+    
+    <!-- Índice de contenidos -->
+    {% if include_toc %}
+    <div class="toc">
+        <h2>Índice de Contenidos</h2>
+        <ul>
+            {% if contenido.transcripciones %}
+            <li><a href="#transcripciones">1. Transcripciones de Audio</a></li>
+            {% endif %}
+            {% if contenido.ocr_results %}
+            <li><a href="#ocr-content">2. Contenido OCR de Documentos</a></li>
+            {% endif %}
+            {% if contenido.micro_memos %}
+            <li><a href="#micro-memos">3. Micro-Memos de Estudio</a></li>
+            {% endif %}
+            {% if contenido.research_results %}
+            <li><a href="#research">4. Referencias y Research Médico</a></li>
+            {% endif %}
+            {% if contenido.analytics %}
+            <li><a href="#analytics">5. Análisis y Métricas</a></li>
+            {% endif %}
+        </ul>
+    </div>
+    {% endif %}
+    
+    <!-- Disclaimer médico -->
+    {% if include_disclaimer %}
+    <div class="disclaimer">
+        <strong>Disclaimer Médico:</strong> Este documento contiene material educativo generado automáticamente. 
+        La información aquí presente no debe considerarse como consejo médico profesional. 
+        Siempre consulte con profesionales médicos calificados para decisiones clínicas.
+    </div>
+    {% endif %}
+    
+    <!-- Contenido principal -->
+    
+    <!-- 1. Transcripciones -->
+    {% if contenido.transcripciones %}
+    <div class="page-break"></div>
+    <h2 id="transcripciones">1. Transcripciones de Audio</h2>
+    
+    {% for transcripcion in contenido.transcripciones %}
+    <div class="content-section">
+        <h3>Transcripción {{ loop.index }}</h3>
+        <div class="transcription">
+            <p><strong>Confianza:</strong> 
+                <span class="confidence-score {% if transcripcion.confianza >= 0.8 %}confidence-high{% elif transcripcion.confianza >= 0.6 %}confidence-medium{% else %}confidence-low{% endif %}">
+                    {{ (transcripcion.confianza * 100) | round(1) }}%
+                </span>
+            </p>
+            <p><strong>Duración:</strong> {{ (transcripcion.duracion / 60) | round(1) }} minutos</p>
+            <p><strong>Speakers:</strong> {{ transcripcion.speakers }}</p>
+            
+            <div style="margin-top: 15pt;">
+                {{ transcripcion.texto | replace('\n', '</p><p>') | safe }}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <!-- 2. Contenido OCR -->
+    {% if contenido.ocr_results %}
+    <div class="page-break"></div>
+    <h2 id="ocr-content">2. Contenido OCR de Documentos</h2>
+    
+    {% for ocr in contenido.ocr_results %}
+    <div class="content-section">
+        <h3>{{ ocr.tipo_contenido | title }} - OCR {{ loop.index }}</h3>
+        <div class="ocr-content">
+            <p><strong>Tipo:</strong> {{ ocr.tipo_contenido }}</p>
+            <p><strong>Especialidad:</strong> {{ ocr.especialidad or "General" }}</p>
+            <p><strong>Confianza:</strong> 
+                <span class="confidence-score {% if ocr.confianza >= 0.8 %}confidence-high{% elif ocr.confianza >= 0.6 %}confidence-medium{% else %}confidence-low{% endif %}">
+                    {{ (ocr.confianza * 100) | round(1) }}%
+                </span>
+            </p>
+            {% if ocr.terminos_medicos %}
+            <p><strong>Términos Médicos Detectados:</strong> {{ ocr.terminos_medicos | length }}</p>
+            {% endif %}
+            
+            <div style="margin-top: 15pt; font-style: normal;">
+                {{ (ocr.texto_corregido or ocr.texto_original) | replace('\n', '</p><p>') | safe }}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <!-- 3. Micro-Memos -->
+    {% if contenido.micro_memos %}
+    <div class="page-break"></div>
+    <h2 id="micro-memos">3. Micro-Memos de Estudio</h2>
+    <p>Tarjetas de estudio generadas automáticamente para facilitar el aprendizaje y la revisión.</p>
+    
+    {% for memo in contenido.micro_memos %}
+    <div class="micro-memo">
+        <h4>{{ memo.titulo }}</h4>
+        
+        <div class="question">
+            <strong>Pregunta:</strong> {{ memo.pregunta }}
+        </div>
+        
+        <div class="answer">
+            <strong>Respuesta:</strong> {{ memo.respuesta }}
+        </div>
+        
+        {% if memo.explicacion %}
+        <div class="explanation">
+            <strong>Explicación:</strong> {{ memo.explicacion }}
+        </div>
+        {% endif %}
+        
+        <div class="meta">
+            Tipo: {{ memo.tipo | title }} | 
+            Dificultad: {{ memo.dificultad | title }} | 
+            Confianza: {{ (memo.confianza * 100) | round(1) }}% |
+            Fuente: {{ memo.fuente | title }}
+            {% if memo.tags %}
+            | Tags: {{ memo.tags | join(', ') }}
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <!-- 4. Referencias y Research -->
+    {% if contenido.research_results %}
+    <div class="page-break"></div>
+    <h2 id="research">4. Referencias y Research Médico</h2>
+    <p>Información complementaria obtenida de fuentes médicas especializadas.</p>
+    
+    {% for research in contenido.research_results %}
+    <div class="research-section">
+        <div class="research-source">
+            {{ research.fuente }} 
+            <span class="confidence-score {% if research.confianza >= 0.8 %}confidence-high{% elif research.confianza >= 0.6 %}confidence-medium{% else %}confidence-low{% endif %}">
+                {{ (research.confianza * 100) | round(1) }}%
+            </span>
+        </div>
+        
+        <p><strong>Query:</strong> {{ research.query }}</p>
+        <p><strong>Relevancia:</strong> {{ (research.relevancia * 100) | round(1) }}%</p>
+        
+        <div style="margin-top: 10pt;">
+            {{ research.contenido | replace('\n', '</p><p>') | safe }}
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+    
+    <!-- 5. Analytics (si están incluidas) -->
+    {% if contenido.analytics %}
+    <div class="page-break"></div>
+    <h2 id="analytics">5. Análisis y Métricas</h2>
+    
+    <div class="stats-box">
+        <h3>Métricas de Calidad</h3>
+        <!-- TODO: Implementar visualización de analytics -->
+        <p>Analytics detalladas disponibles en formato JSON.</p>
+    </div>
+    {% endif %}
+    
+    <!-- Footer con información adicional -->
+    <div style="margin-top: 40pt; border-top: 1pt solid #ddd; padding-top: 20pt; font-size: 10pt; color: #666;">
+        <p><strong>Información del Export:</strong></p>
+        <p>
+            Generado por AxoNote v1.0 el {{ fecha_generacion.strftime('%d/%m/%Y a las %H:%M') }}.<br>
+            ID de Sesión: {{ export_session.id }}<br>
+            Calidad Promedio: {{ (export_session.quality_score * 100) | round(1) }}%<br>
+            Total de Elementos Procesados: {{ contenido.total_elementos }}
+        </p>
+        
+        {% if include_disclaimer %}
+        <p style="font-style: italic; margin-top: 15pt;">
+            Este documento ha sido generado automáticamente para fines educativos. 
+            La precisión del contenido depende de la calidad de las fuentes originales y los algoritmos de procesamiento utilizados.
+        </p>
+        {% endif %}
+    </div>
+</body>
+</html>

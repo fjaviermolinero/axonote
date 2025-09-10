@@ -148,6 +148,9 @@ class ClassSession(BaseModel):
     ocr_results = relationship("OCRResult", back_populates="class_session", cascade="all, delete-orphan")
     micro_memos = relationship("MicroMemo", back_populates="class_session", cascade="all, delete-orphan")
     
+    # Relationships de Fase 10
+    export_sessions = relationship("ExportSession", back_populates="class_session", cascade="all, delete-orphan")
+    
     def __repr__(self) -> str:
         return (
             f"<ClassSession("

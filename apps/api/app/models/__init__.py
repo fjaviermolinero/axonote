@@ -24,6 +24,8 @@ from .notion_template import NotionTemplate, NotionTemplateInstance, NotionBlock
 from .ocr_result import OCRResult
 from .micro_memo import MicroMemo
 from .micro_memo_collection import MicroMemoCollection
+from .export_session import ExportSession
+from .tts_result import TTSResult
 
 __all__ = [
     "ClassSession",
@@ -51,5 +53,7 @@ __all__ = [
     "NotionBlockTemplate",
     "OCRResult",
     "MicroMemo",
-    "MicroMemoCollection"
+    "MicroMemoCollection",
+    "ExportSession",
+    "TTSResult"
 ]

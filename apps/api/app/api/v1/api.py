@@ -5,7 +5,7 @@ Agrupa todos los endpoints de la versión 1 de la API.
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health, settings, recordings, processing, llm_analysis, research, notion, ocr, micromemos
+from app.api.v1.endpoints import health, settings, recordings, processing, llm_analysis, research, notion, ocr, micromemos, export, tts
 
 # Router principal de API v1
 api_router = APIRouter()
@@ -59,4 +59,16 @@ api_router.include_router(
 api_router.include_router(
     micromemos.router,
     tags=["micromemos"]
+)
+
+api_router.include_router(
+    export.router,
+    prefix="/export",
+    tags=["export"]
+)
+
+api_router.include_router(
+    tts.router,
+    prefix="/tts",
+    tags=["tts"]
 )

@@ -2317,6 +2317,586 @@ class NotionService(BaseService):
         except Exception as e:
             self.logger.error(f"Error construyendo bloques de memo: {e}")
             return []
+    
+    # ========================================================================
+    # MÉTODOS FASE 10: EXPORT Y TTS INTEGRATION
+    # ========================================================================
+    
+    async def sync_export_session(self, export_session) -> Optional[str]:
+        """
+        Sincroniza una sesión de export con Notion.
+        
+        Args:
+            export_session: Sesión de export a sincronizar
+            
+        Returns:
+            ID de la página de Notion creada
+        """
+        try:
+            if not settings.NOTION_SYNC_EXPORTS:
+                self.logger.info("Export sync disabled")
+                return None
+            
+            if not self.client:
+                await self.initialize()
+            
+            self.logger.info(f"Syncing export session {export_session.id} to Notion")
+            
+            # Preparar datos del export
+            export_data = {
+                "export_id": str(export_session.id),
+                "export_format": export_session.export_format,
+                "export_title": export_session.export_title or f"Export {export_session.export_format.upper()}",
+                "status": export_session.status,
+                "progress": export_session.progress_percentage,
+                "quality_score": export_session.quality_score,
+                "elements_exported": export_session.elements_exported,
+                "processing_time": export_session.processing_time_seconds,
+                "created_at": export_session.created_at,
+                "completed_at": export_session.completed_at,
+                "class_session_id": str(export_session.class_session_id),
+                "output_files": export_session.output_files or []
+            }
+            
+            # Obtener información de la clase
+            with next(get_db()) as db:
+                class_session = db.query(ClassSession).filter(
+                    ClassSession.id == export_session.class_session_id
+                ).first()
+                
+                if class_session:
+                    export_data.update({
+                        "asignatura": class_session.asignatura,
+                        "tema": class_session.tema,
+                        "profesor": class_session.profesor_text,
+                        "fecha_clase": class_session.fecha.isoformat() if class_session.fecha else None
+                    })
+            
+            # Crear página en Notion
+            page_id = await self._create_export_page(export_data)
+            
+            # Registrar sincronización
+            if page_id:
+                await self._record_export_sync(export_session.id, page_id)
+            
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Failed to sync export session {export_session.id}: {e}")
+            return None
+    
+    async def _create_export_page(self, export_data: Dict[str, Any]) -> Optional[str]:
+        """Crear página de export en Notion."""
+        try:
+            database_id = settings.NOTION_DB_EXPORT_SESSIONS
+            if not database_id:
+                self.logger.warning("Export sessions database not configured")
+                return None
+            
+            # Propiedades de la página
+            properties = {
+                "Título": {
+                    "title": [{"text": {"content": export_data["export_title"]}}]
+                },
+                "Formato": {
+                    "select": {"name": export_data["export_format"].upper()}
+                },
+                "Estado": {
+                    "select": {"name": export_data["status"].title()}
+                },
+                "Progreso": {
+                    "number": export_data["progress"]
+                },
+                "Calidad": {
+                    "number": round(export_data["quality_score"] * 100, 1) if export_data["quality_score"] else 0
+                },
+                "Elementos": {
+                    "number": export_data["elements_exported"]
+                },
+                "Tiempo (s)": {
+                    "number": round(export_data["processing_time"], 1) if export_data["processing_time"] else 0
+                },
+                "Creado": {
+                    "date": {"start": export_data["created_at"].isoformat()}
+                }
+            }
+            
+            # Añadir fecha de completado si existe
+            if export_data.get("completed_at"):
+                properties["Completado"] = {
+                    "date": {"start": export_data["completed_at"].isoformat()}
+                }
+            
+            # Añadir información de clase si existe
+            if export_data.get("asignatura"):
+                properties["Asignatura"] = {
+                    "rich_text": [{"text": {"content": export_data["asignatura"]}}]
+                }
+            
+            if export_data.get("tema"):
+                properties["Tema"] = {
+                    "rich_text": [{"text": {"content": export_data["tema"]}}]
+                }
+            
+            # Contenido de la página
+            children = self._build_export_page_content(export_data)
+            
+            # Crear página
+            await self.rate_limiter.acquire()
+            response = await self._make_api_call("pages", {
+                "parent": {"database_id": database_id},
+                "properties": properties,
+                "children": children
+            })
+            
+            if response and "id" in response:
+                self.logger.info(f"Created export page: {response['id']}")
+                return response["id"]
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create export page: {e}")
+            return None
+    
+    def _build_export_page_content(self, export_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Construir contenido de la página de export."""
+        blocks = []
+        
+        try:
+            # Header con información general
+            blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"text": {"content": f"📤 {export_data['export_title']}"}}]
+                }
+            })
+            
+            # Información básica
+            info_text = f"""
+            **Formato:** {export_data['export_format'].upper()}
+            **Estado:** {export_data['status'].title()}
+            **Progreso:** {export_data['progress']:.1f}%
+            **Elementos exportados:** {export_data['elements_exported']}
+            **Calidad:** {export_data['quality_score']*100:.1f}% si export_data['quality_score'] else 'N/A'
+            **Tiempo de procesamiento:** {export_data['processing_time']:.1f}s si export_data['processing_time'] else 'N/A'
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": info_text.strip()}}]
+                }
+            })
+            
+            # Información de la clase
+            if export_data.get("asignatura"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "📚 Información de la Clase"}}]
+                    }
+                })
+                
+                class_info = f"""
+                **Asignatura:** {export_data.get('asignatura', 'N/A')}
+                **Tema:** {export_data.get('tema', 'N/A')}
+                **Profesor:** {export_data.get('profesor', 'N/A')}
+                **Fecha:** {export_data.get('fecha_clase', 'N/A')}
+                """
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": class_info.strip()}}]
+                    }
+                })
+            
+            # Archivos generados
+            if export_data.get("output_files"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "📁 Archivos Generados"}}]
+                    }
+                })
+                
+                for file_info in export_data["output_files"]:
+                    file_text = f"""
+                    **Archivo:** {file_info.get('path', 'N/A')}
+                    **Tamaño:** {file_info.get('size', 0) / 1024 / 1024:.2f} MB
+                    **Formato:** {file_info.get('format', 'N/A')}
+                    **Creado:** {file_info.get('created_at', 'N/A')}
+                    """
+                    
+                    blocks.append({
+                        "object": "block",
+                        "type": "callout",
+                        "callout": {
+                            "rich_text": [{"text": {"content": file_text.strip()}}],
+                            "icon": {"emoji": "📄"}
+                        }
+                    })
+            
+            # Metadatos técnicos
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": "🔧 Metadatos Técnicos"}}]
+                }
+            })
+            
+            metadata_text = f"""
+            **ID de Export:** {export_data['export_id']}
+            **ID de Clase:** {export_data['class_session_id']}
+            **Fecha de Creación:** {export_data['created_at'].strftime('%d/%m/%Y %H:%M')}
+            **Fecha de Completado:** {export_data['completed_at'].strftime('%d/%m/%Y %H:%M') if export_data.get('completed_at') else 'En progreso'}
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": metadata_text.strip()}}]
+                }
+            })
+            
+            return blocks
+            
+        except Exception as e:
+            self.logger.error(f"Error building export page content: {e}")
+            return []
+    
+    async def sync_tts_result(self, tts_result) -> Optional[str]:
+        """
+        Sincroniza un resultado de TTS con Notion.
+        
+        Args:
+            tts_result: Resultado TTS a sincronizar
+            
+        Returns:
+            ID de la página de Notion creada
+        """
+        try:
+            if not settings.NOTION_SYNC_TTS:
+                self.logger.info("TTS sync disabled")
+                return None
+            
+            if not self.client:
+                await self.initialize()
+            
+            self.logger.info(f"Syncing TTS result {tts_result.id} to Notion")
+            
+            # Preparar datos del TTS
+            tts_data = {
+                "tts_id": str(tts_result.id),
+                "tts_type": tts_result.tts_type,
+                "voice_model": tts_result.voice_model,
+                "language": tts_result.language,
+                "status": tts_result.status,
+                "duration": tts_result.duration_seconds,
+                "file_size": tts_result.file_size_bytes,
+                "quality": tts_result.synthesis_quality,
+                "confidence": tts_result.confidence_score,
+                "audio_file": tts_result.audio_file_path,
+                "created_at": tts_result.created_at,
+                "completed_at": tts_result.completed_at,
+                "has_chapters": tts_result.has_chapters,
+                "chapter_markers": tts_result.chapter_markers
+            }
+            
+            # Obtener información del memo/colección asociada
+            with next(get_db()) as db:
+                if tts_result.micro_memo_id:
+                    memo = db.query(MicroMemo).filter(
+                        MicroMemo.id == tts_result.micro_memo_id
+                    ).first()
+                    if memo:
+                        tts_data.update({
+                            "content_type": "micro_memo",
+                            "content_title": memo.title,
+                            "content_question": memo.question,
+                            "content_answer": memo.answer
+                        })
+                
+                elif tts_result.collection_id:
+                    collection = db.query(MicroMemoCollection).filter(
+                        MicroMemoCollection.id == tts_result.collection_id
+                    ).first()
+                    if collection:
+                        tts_data.update({
+                            "content_type": "collection",
+                            "content_title": collection.name,
+                            "content_description": collection.description
+                        })
+            
+            # Crear página en Notion
+            page_id = await self._create_tts_page(tts_data)
+            
+            # Registrar sincronización
+            if page_id:
+                await self._record_tts_sync(tts_result.id, page_id)
+            
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Failed to sync TTS result {tts_result.id}: {e}")
+            return None
+    
+    async def _create_tts_page(self, tts_data: Dict[str, Any]) -> Optional[str]:
+        """Crear página de TTS en Notion."""
+        try:
+            database_id = settings.NOTION_DB_TTS_RESULTS
+            if not database_id:
+                self.logger.warning("TTS results database not configured")
+                return None
+            
+            # Propiedades de la página
+            properties = {
+                "Título": {
+                    "title": [{"text": {"content": f"🎵 TTS {tts_data['content_title']}" if tts_data.get('content_title') else f"TTS {tts_data['tts_type']}"}}]
+                },
+                "Tipo": {
+                    "select": {"name": tts_data["tts_type"].title()}
+                },
+                "Estado": {
+                    "select": {"name": tts_data["status"].title()}
+                },
+                "Modelo Voz": {
+                    "select": {"name": tts_data["voice_model"]}
+                },
+                "Idioma": {
+                    "select": {"name": tts_data["language"].upper()}
+                },
+                "Duración (s)": {
+                    "number": round(tts_data["duration"], 1)
+                },
+                "Tamaño (MB)": {
+                    "number": round(tts_data["file_size"] / 1024 / 1024, 2) if tts_data["file_size"] else 0
+                },
+                "Calidad": {
+                    "number": round(tts_data["quality"] * 100, 1) if tts_data["quality"] else 0
+                },
+                "Confianza": {
+                    "number": round(tts_data["confidence"] * 100, 1) if tts_data["confidence"] else 0
+                },
+                "Creado": {
+                    "date": {"start": tts_data["created_at"].isoformat()}
+                }
+            }
+            
+            # Añadir fecha de completado si existe
+            if tts_data.get("completed_at"):
+                properties["Completado"] = {
+                    "date": {"start": tts_data["completed_at"].isoformat()}
+                }
+            
+            # Contenido de la página
+            children = self._build_tts_page_content(tts_data)
+            
+            # Crear página
+            await self.rate_limiter.acquire()
+            response = await self._make_api_call("pages", {
+                "parent": {"database_id": database_id},
+                "properties": properties,
+                "children": children
+            })
+            
+            if response and "id" in response:
+                self.logger.info(f"Created TTS page: {response['id']}")
+                return response["id"]
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"Failed to create TTS page: {e}")
+            return None
+    
+    def _build_tts_page_content(self, tts_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Construir contenido de la página de TTS."""
+        blocks = []
+        
+        try:
+            # Header con información general
+            title = f"🎵 TTS - {tts_data.get('content_title', tts_data['tts_type'].title())}"
+            blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"text": {"content": title}}]
+                }
+            })
+            
+            # Información básica del audio
+            info_text = f"""
+            **Tipo de TTS:** {tts_data['tts_type'].title()}
+            **Modelo de Voz:** {tts_data['voice_model']}
+            **Idioma:** {tts_data['language'].upper()}
+            **Estado:** {tts_data['status'].title()}
+            **Duración:** {tts_data['duration']:.1f} segundos ({tts_data['duration']/60:.1f} minutos)
+            **Tamaño:** {tts_data['file_size']/1024/1024:.2f} MB si tts_data['file_size'] else 'N/A'
+            **Calidad:** {tts_data['quality']*100:.1f}% si tts_data['quality'] else 'N/A'
+            **Confianza:** {tts_data['confidence']*100:.1f}% si tts_data['confidence'] else 'N/A'
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": info_text.strip()}}]
+                }
+            })
+            
+            # Información del contenido fuente
+            if tts_data.get("content_type"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "📚 Contenido Fuente"}}]
+                    }
+                })
+                
+                if tts_data["content_type"] == "micro_memo":
+                    content_text = f"""
+                    **Tipo:** Micro-memo Individual
+                    **Título:** {tts_data.get('content_title', 'N/A')}
+                    **Pregunta:** {tts_data.get('content_question', 'N/A')}
+                    **Respuesta:** {tts_data.get('content_answer', 'N/A')}
+                    """
+                elif tts_data["content_type"] == "collection":
+                    content_text = f"""
+                    **Tipo:** Colección de Micro-memos
+                    **Nombre:** {tts_data.get('content_title', 'N/A')}
+                    **Descripción:** {tts_data.get('content_description', 'N/A')}
+                    """
+                else:
+                    content_text = f"**Tipo:** {tts_data['content_type'].title()}"
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "callout",
+                    "callout": {
+                        "rich_text": [{"text": {"content": content_text.strip()}}],
+                        "icon": {"emoji": "📖"}
+                    }
+                })
+            
+            # Información de capítulos si existen
+            if tts_data.get("has_chapters") and tts_data.get("chapter_markers"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "📑 Marcadores de Capítulos"}}]
+                    }
+                })
+                
+                for chapter in tts_data["chapter_markers"]:
+                    chapter_text = f"**{chapter.get('index', 'N/A')}. {chapter.get('title', 'Sin título')}** - {chapter.get('start_time', 0):.1f}s"
+                    blocks.append({
+                        "object": "block",
+                        "type": "bulleted_list_item",
+                        "bulleted_list_item": {
+                            "rich_text": [{"text": {"content": chapter_text}}]
+                        }
+                    })
+            
+            # Información del archivo de audio
+            if tts_data.get("audio_file"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "🎧 Archivo de Audio"}}]
+                    }
+                })
+                
+                file_info = f"""
+                **Ruta del archivo:** {tts_data['audio_file']}
+                **Formato:** {tts_data.get('audio_format', 'MP3').upper()}
+                **Calidad:** {tts_data.get('audio_quality', 'Media').title()}
+                """
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": file_info.strip()}}]
+                    }
+                })
+            
+            # Metadatos técnicos
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": "🔧 Metadatos Técnicos"}}]
+                }
+            })
+            
+            metadata_text = f"""
+            **ID de TTS:** {tts_data['tts_id']}
+            **Fecha de Creación:** {tts_data['created_at'].strftime('%d/%m/%Y %H:%M')}
+            **Fecha de Completado:** {tts_data['completed_at'].strftime('%d/%m/%Y %H:%M') if tts_data.get('completed_at') else 'En progreso'}
+            **Tiene Capítulos:** {'Sí' if tts_data.get('has_chapters') else 'No'}
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": metadata_text.strip()}}]
+                }
+            })
+            
+            return blocks
+            
+        except Exception as e:
+            self.logger.error(f"Error building TTS page content: {e}")
+            return []
+    
+    async def _record_export_sync(self, export_session_id: UUID, notion_page_id: str):
+        """Registrar sincronización de export en BD."""
+        try:
+            with next(get_db()) as db:
+                sync_record = NotionSyncRecord(
+                    source_id=export_session_id,
+                    source_type="export_session",
+                    notion_page_id=notion_page_id,
+                    sync_type="create",
+                    sync_status="completed",
+                    last_sync_at=datetime.utcnow()
+                )
+                db.add(sync_record)
+                db.commit()
+                
+        except Exception as e:
+            self.logger.error(f"Failed to record export sync: {e}")
+    
+    async def _record_tts_sync(self, tts_result_id: UUID, notion_page_id: str):
+        """Registrar sincronización de TTS en BD."""
+        try:
+            with next(get_db()) as db:
+                sync_record = NotionSyncRecord(
+                    source_id=tts_result_id,
+                    source_type="tts_result",
+                    notion_page_id=notion_page_id,
+                    sync_type="create",
+                    sync_status="completed",
+                    last_sync_at=datetime.utcnow()
+                )
+                db.add(sync_record)
+                db.commit()
+                
+        except Exception as e:
+            self.logger.error(f"Failed to record TTS sync: {e}")
 
 
 # Instancia global

@@ -1,0 +1,680 @@
+/* 
+Estilos CSS para exports médicos de AxoNote
+Optimizado para PDF, impresión y visualización web
+*/
+
+/* ==============================================
+   CONFIGURACIÓN BASE PARA PDF
+   ============================================== */
+
+@page {
+    size: A4;
+    margin: 2.5cm 2cm 2.5cm 2cm;
+    
+    @top-center {
+        content: element(running-header);
+        font-size: 10pt;
+        color: #666;
+    }
+    
+    @bottom-center {
+        content: "Página " counter(page) " de " counter(pages);
+        font-size: 10pt;
+        color: #666;
+    }
+    
+    @bottom-right {
+        content: "AxoNote - " string(export-date);
+        font-size: 8pt;
+        color: #999;
+    }
+}
+
+@page:first {
+    @top-center { content: none; }
+}
+
+/* ==============================================
+   TIPOGRAFÍA Y LAYOUT BASE
+   ============================================== */
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Times New Roman', serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #333;
+    margin: 0;
+    padding: 0;
+    background: white;
+}
+
+/* Tipografía jerárquica */
+h1 {
+    color: #2c5aa0;
+    font-size: 24pt;
+    font-weight: bold;
+    text-align: center;
+    margin-bottom: 30pt;
+    border-bottom: 3pt solid #2c5aa0;
+    padding-bottom: 10pt;
+    page-break-after: avoid;
+}
+
+h2 {
+    color: #2c5aa0;
+    font-size: 18pt;
+    font-weight: bold;
+    margin-top: 30pt;
+    margin-bottom: 15pt;
+    border-left: 5pt solid #2c5aa0;
+    padding-left: 15pt;
+    page-break-after: avoid;
+    position: running(running-header);
+}
+
+h3 {
+    color: #4a6fa5;
+    font-size: 14pt;
+    font-weight: bold;
+    margin-top: 20pt;
+    margin-bottom: 10pt;
+    page-break-after: avoid;
+}
+
+h4 {
+    color: #666;
+    font-size: 12pt;
+    font-weight: bold;
+    margin-top: 15pt;
+    margin-bottom: 8pt;
+    page-break-after: avoid;
+}
+
+h5 {
+    color: #777;
+    font-size: 11pt;
+    font-weight: bold;
+    margin-top: 12pt;
+    margin-bottom: 6pt;
+    page-break-after: avoid;
+}
+
+p {
+    margin-bottom: 12pt;
+    text-align: justify;
+    orphans: 2;
+    widows: 2;
+}
+
+/* ==============================================
+   ELEMENTOS ESTRUCTURALES
+   ============================================== */
+
+.header-info {
+    background: #f8f9fa;
+    border: 1pt solid #dee2e6;
+    border-radius: 5pt;
+    padding: 20pt;
+    margin-bottom: 25pt;
+    page-break-inside: avoid;
+}
+
+.header-info table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+.header-info td {
+    padding: 8pt 12pt;
+    border-bottom: 1pt solid #e9ecef;
+    vertical-align: top;
+}
+
+.header-info td:first-child {
+    font-weight: bold;
+    width: 25%;
+    color: #2c5aa0;
+    white-space: nowrap;
+}
+
+.header-info td:last-child {
+    width: 75%;
+}
+
+.toc {
+    background: #f8f9fa;
+    border: 1pt solid #dee2e6;
+    border-radius: 5pt;
+    padding: 20pt;
+    margin-bottom: 30pt;
+    page-break-after: always;
+    page-break-inside: avoid;
+}
+
+.toc h2 {
+    margin-top: 0;
+    border: none;
+    padding: 0;
+}
+
+.toc ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 15pt 0;
+}
+
+.toc li {
+    margin-bottom: 8pt;
+    padding-left: 20pt;
+    text-indent: -20pt;
+    line-height: 1.4;
+}
+
+.toc a {
+    text-decoration: none;
+    color: #2c5aa0;
+    border-bottom: 1pt dotted #2c5aa0;
+}
+
+.toc a:hover {
+    color: #1e3d72;
+    border-bottom-color: #1e3d72;
+}
+
+/* ==============================================
+   COMPONENTES DE CONTENIDO
+   ============================================== */
+
+.content-section {
+    margin-bottom: 25pt;
+    page-break-inside: avoid;
+}
+
+.stats-box {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border: 1pt solid #90caf9;
+    border-radius: 8pt;
+    padding: 20pt;
+    margin: 20pt 0;
+    text-align: center;
+    page-break-inside: avoid;
+}
+
+.stats-box h3 {
+    margin-top: 0;
+    color: #1565c0;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150pt, 1fr));
+    gap: 15pt;
+    margin: 20pt 0;
+}
+
+.stat-item {
+    background: #f0f8ff;
+    border: 1pt solid #b3d9ff;
+    border-radius: 5pt;
+    padding: 15pt;
+    text-align: center;
+}
+
+.stat-number {
+    font-size: 20pt;
+    font-weight: bold;
+    color: #2c5aa0;
+    display: block;
+}
+
+.stat-label {
+    font-size: 10pt;
+    color: #666;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+}
+
+/* ==============================================
+   TIPOS DE CONTENIDO ESPECÍFICOS
+   ============================================== */
+
+/* Transcripciones */
+.transcription {
+    background: linear-gradient(135deg, #f0f8ff 0%, #e6f3ff 100%);
+    border-left: 4pt solid #2c5aa0;
+    padding: 15pt;
+    margin: 15pt 0;
+    font-style: italic;
+    page-break-inside: avoid;
+}
+
+.transcription .speaker {
+    font-weight: bold;
+    color: #1e3d72;
+    font-style: normal;
+}
+
+.transcription .timestamp {
+    color: #666;
+    font-size: 10pt;
+    font-style: normal;
+}
+
+/* Contenido OCR */
+.ocr-content {
+    background: linear-gradient(135deg, #f5f5f5 0%, #eeeeee 100%);
+    border: 1pt solid #ddd;
+    border-radius: 5pt;
+    padding: 15pt;
+    margin: 15pt 0;
+    font-family: 'Arial', sans-serif;
+    font-size: 11pt;
+    page-break-inside: avoid;
+}
+
+.ocr-header {
+    background: #e0e0e0;
+    margin: -15pt -15pt 15pt -15pt;
+    padding: 10pt 15pt;
+    border-radius: 5pt 5pt 0 0;
+    font-weight: bold;
+    color: #555;
+}
+
+.ocr-metadata {
+    font-size: 9pt;
+    color: #666;
+    margin-bottom: 10pt;
+    padding-bottom: 10pt;
+    border-bottom: 1pt solid #ddd;
+}
+
+/* Micro-memos */
+.micro-memo {
+    background: linear-gradient(135deg, #fff8dc 0%, #f5f5dc 100%);
+    border: 1pt solid #deb887;
+    border-radius: 8pt;
+    padding: 15pt;
+    margin: 15pt 0;
+    page-break-inside: avoid;
+    position: relative;
+}
+
+.micro-memo::before {
+    content: "🧠";
+    position: absolute;
+    top: 10pt;
+    right: 15pt;
+    font-size: 14pt;
+    opacity: 0.7;
+}
+
+.micro-memo .title {
+    font-size: 13pt;
+    font-weight: bold;
+    color: #8b4513;
+    margin-bottom: 12pt;
+    border-bottom: 1pt solid #deb887;
+    padding-bottom: 8pt;
+}
+
+.micro-memo .question {
+    font-weight: bold;
+    color: #b8860b;
+    margin-bottom: 10pt;
+    padding-left: 15pt;
+    position: relative;
+}
+
+.micro-memo .question::before {
+    content: "❓";
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.micro-memo .answer {
+    color: #2e7d32;
+    margin-bottom: 10pt;
+    padding-left: 15pt;
+    position: relative;
+}
+
+.micro-memo .answer::before {
+    content: "✅";
+    position: absolute;
+    left: 0;
+    top: 0;
+}
+
+.micro-memo .explanation {
+    font-size: 10pt;
+    color: #666;
+    font-style: italic;
+    background: rgba(255, 255, 255, 0.7);
+    padding: 10pt;
+    border-radius: 5pt;
+    margin-top: 10pt;
+    border-left: 3pt solid #deb887;
+}
+
+.micro-memo .meta {
+    font-size: 9pt;
+    color: #999;
+    text-align: right;
+    margin-top: 12pt;
+    border-top: 1pt solid #deb887;
+    padding-top: 8pt;
+}
+
+/* Research y referencias */
+.research-section {
+    background: linear-gradient(135deg, #f0fff0 0%, #e6ffe6 100%);
+    border: 1pt solid #90ee90;
+    border-radius: 5pt;
+    padding: 15pt;
+    margin: 15pt 0;
+    page-break-inside: avoid;
+}
+
+.research-source {
+    font-weight: bold;
+    color: #006400;
+    margin-bottom: 8pt;
+    font-size: 11pt;
+}
+
+.research-query {
+    font-style: italic;
+    color: #2e7d32;
+    margin-bottom: 10pt;
+    font-size: 10pt;
+}
+
+.research-content {
+    line-height: 1.5;
+    color: #333;
+}
+
+.research-metadata {
+    margin-top: 10pt;
+    padding-top: 8pt;
+    border-top: 1pt solid #90ee90;
+    font-size: 9pt;
+    color: #666;
+}
+
+/* ==============================================
+   INDICADORES Y BADGES
+   ============================================== */
+
+.confidence-score {
+    display: inline-block;
+    padding: 3pt 8pt;
+    border-radius: 10pt;
+    font-size: 9pt;
+    font-weight: bold;
+    color: white;
+    text-align: center;
+    min-width: 40pt;
+}
+
+.confidence-high { 
+    background: linear-gradient(135deg, #28a745 0%, #20c997 100%); 
+}
+
+.confidence-medium { 
+    background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); 
+    color: #333; 
+}
+
+.confidence-low { 
+    background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%); 
+}
+
+.difficulty-badge {
+    display: inline-block;
+    padding: 2pt 6pt;
+    border-radius: 8pt;
+    font-size: 8pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.5pt;
+}
+
+.difficulty-very-easy { background: #d4edda; color: #155724; }
+.difficulty-easy { background: #cce5f0; color: #0c5460; }
+.difficulty-medium { background: #fff3cd; color: #856404; }
+.difficulty-hard { background: #f8d7da; color: #721c24; }
+.difficulty-very-hard { background: #f5c6cb; color: #491217; }
+.difficulty-expert { background: #e2e3e5; color: #383d41; }
+
+.type-badge {
+    display: inline-block;
+    padding: 2pt 6pt;
+    border-radius: 6pt;
+    font-size: 8pt;
+    font-weight: normal;
+    background: #e9ecef;
+    color: #495057;
+    margin-left: 5pt;
+}
+
+/* ==============================================
+   DISCLAIMER Y AVISOS
+   ============================================== */
+
+.disclaimer {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+    border: 1pt solid #ffeaa7;
+    border-radius: 5pt;
+    padding: 15pt;
+    margin: 20pt 0;
+    font-size: 10pt;
+    font-style: italic;
+    color: #856404;
+    page-break-inside: avoid;
+}
+
+.disclaimer::before {
+    content: "⚠️ ";
+    font-style: normal;
+    font-weight: bold;
+}
+
+.medical-warning {
+    background: #ffe6e6;
+    border: 2pt solid #ff9999;
+    border-radius: 5pt;
+    padding: 12pt;
+    margin: 15pt 0;
+    font-size: 10pt;
+    color: #cc0000;
+    text-align: center;
+    font-weight: bold;
+}
+
+/* ==============================================
+   FOOTER Y METADATA
+   ============================================== */
+
+.footer {
+    margin-top: 40pt;
+    border-top: 2pt solid #dee2e6;
+    padding-top: 20pt;
+    font-size: 10pt;
+    color: #666;
+    page-break-inside: avoid;
+}
+
+.footer .export-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20pt;
+    margin-bottom: 15pt;
+}
+
+.footer .generation-info {
+    text-align: right;
+    font-style: italic;
+}
+
+.footer .system-info {
+    font-size: 9pt;
+    color: #999;
+    text-align: center;
+    margin-top: 15pt;
+    padding-top: 10pt;
+    border-top: 1pt solid #e9ecef;
+}
+
+/* ==============================================
+   UTILIDADES DE LAYOUT
+   ============================================== */
+
+.page-break {
+    page-break-before: always;
+}
+
+.page-break-after {
+    page-break-after: always;
+}
+
+.no-break {
+    page-break-inside: avoid;
+}
+
+.break-before {
+    page-break-before: auto;
+}
+
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+.text-justify { text-align: justify; }
+
+.mt-small { margin-top: 10pt; }
+.mt-medium { margin-top: 20pt; }
+.mt-large { margin-top: 30pt; }
+
+.mb-small { margin-bottom: 10pt; }
+.mb-medium { margin-bottom: 20pt; }
+.mb-large { margin-bottom: 30pt; }
+
+.px-small { padding-left: 5pt; padding-right: 5pt; }
+.px-medium { padding-left: 10pt; padding-right: 10pt; }
+.px-large { padding-left: 15pt; padding-right: 15pt; }
+
+.py-small { padding-top: 5pt; padding-bottom: 5pt; }
+.py-medium { padding-top: 10pt; padding-bottom: 10pt; }
+.py-large { padding-top: 15pt; padding-bottom: 15pt; }
+
+/* ==============================================
+   RESPONSIVE Y MEDIA QUERIES
+   ============================================== */
+
+@media screen and (max-width: 768px) {
+    body {
+        font-size: 11pt;
+        line-height: 1.5;
+    }
+    
+    h1 { font-size: 20pt; }
+    h2 { font-size: 16pt; }
+    h3 { font-size: 13pt; }
+    
+    .header-info table {
+        display: block;
+    }
+    
+    .header-info td {
+        display: block;
+        width: 100% !important;
+        padding: 5pt 0;
+        border: none;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .footer .export-info {
+        grid-template-columns: 1fr;
+        gap: 10pt;
+    }
+}
+
+@media print {
+    body {
+        font-size: 11pt;
+        line-height: 1.4;
+    }
+    
+    .no-print {
+        display: none !important;
+    }
+    
+    a {
+        color: inherit;
+        text-decoration: none;
+    }
+    
+    .content-section,
+    .micro-memo,
+    .transcription,
+    .ocr-content,
+    .research-section {
+        break-inside: avoid;
+    }
+}
+
+/* ==============================================
+   ANIMACIONES (SOLO PARA WEB)
+   ============================================== */
+
+@media screen {
+    .content-section {
+        animation: fadeIn 0.5s ease-out;
+    }
+    
+    @keyframes fadeIn {
+        from { 
+            opacity: 0; 
+            transform: translateY(20px); 
+        }
+        to { 
+            opacity: 1; 
+            transform: translateY(0); 
+        }
+    }
+    
+    .micro-memo:hover,
+    .transcription:hover,
+    .ocr-content:hover,
+    .research-section:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        transition: all 0.3s ease;
+    }
+}
+
+/* ==============================================
+   SOPORTE PARA MÚLTIPLES IDIOMAS
+   ============================================== */
+
+:lang(it) {
+    quotes: "«" "»" "'" "'";
+}
+
+:lang(en) {
+    quotes: """ """ "'" "'";
+}
+
+:lang(es) {
+    quotes: "«" "»" "'" "'";
+}

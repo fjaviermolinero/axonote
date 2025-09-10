@@ -12,6 +12,8 @@ from .diarization_service import diarization_service
 from .post_processing_service import PostProcessingService
 from .ocr_service import OCRService, ocr_service
 from .micro_memo_service import MicroMemoService, micro_memo_service
+from .export_service import ExportService, export_service
+from .tts_service import TTSService, tts_service
 
 __all__ = [
     "MinioService",
@@ -20,10 +22,14 @@ __all__ = [
     "PostProcessingService",
     "OCRService",
     "MicroMemoService",
+    "ExportService",
+    "TTSService",
     "minio_service",
     "chunk_service",
     "whisper_service",
     "diarization_service",
     "ocr_service",
-    "micro_memo_service"
+    "micro_memo_service",
+    "export_service",
+    "tts_service"
 ]

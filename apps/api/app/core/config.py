@@ -450,6 +450,80 @@ class Settings(BaseSettings):
     NOTION_MICROMEMO_PAGE_LIMIT: int = 100  # Límite memos por página
     NOTION_CREATE_INDIVIDUAL_MEMO_PAGES: bool = False  # Páginas individuales por memo
     
+    # ==============================================
+    # EXPORT & TTS CONFIGURATION - FASE 10
+    # ==============================================
+    
+    # Export Configuration
+    EXPORT_ENABLED: bool = True
+    EXPORT_STORAGE_PATH: str = "/app/data/exports"
+    EXPORT_TEMPLATES_PATH: str = "/app/templates/export"
+    EXPORT_MAX_FILE_SIZE_MB: int = 500
+    EXPORT_CONCURRENT_JOBS: int = 3
+    EXPORT_CLEANUP_DAYS: int = 30
+    EXPORT_FORMATS: str = "pdf,docx,json,anki,csv,html"
+    EXPORT_DEFAULT_FORMAT: str = "pdf"
+    EXPORT_COMPRESSION: bool = True
+    EXPORT_QUALITY_THRESHOLD: float = 0.8
+    
+    # PDF Export
+    EXPORT_PDF_ENGINE: str = "weasyprint"  # weasyprint, reportlab
+    EXPORT_PDF_PAGE_SIZE: str = "A4"
+    EXPORT_PDF_MARGINS: str = "20mm"
+    EXPORT_PDF_BOOKMARKS: bool = True
+    EXPORT_PDF_TOC: bool = True
+    
+    # DOCX Export
+    EXPORT_DOCX_TEMPLATE: str = "medical_template.docx"
+    EXPORT_DOCX_STYLES: str = "medical_styles.xml"
+    
+    # Anki Export
+    EXPORT_ANKI_DECK_NAME: str = "Axonote Medical"
+    EXPORT_ANKI_NOTE_TYPE: str = "medical_flashcard"
+    EXPORT_ANKI_INCLUDE_TTS: bool = True
+    
+    # TTS Configuration
+    TTS_ENABLED: bool = True
+    TTS_STORAGE_PATH: str = "/app/data/tts"
+    TTS_ENGINE: str = "piper"  # piper, espeak, festival
+    TTS_LANGUAGE: str = "ita"  # Italiano principal
+    TTS_VOICE_MODEL: str = "it_riccardo_quality"
+    TTS_QUALITY: str = "medium"  # low, medium, high, studio
+    TTS_CONCURRENT_SYNTHESIS: int = 2
+    
+    # Piper TTS
+    PIPER_CMD: str = "/usr/bin/piper"
+    PIPER_MODEL_PATH: str = "/app/models/piper"
+    PIPER_CONFIG_PATH: str = "/app/config/piper"
+    PIPER_CUDA_ENABLED: bool = False
+    PIPER_BATCH_SIZE: int = 1
+    
+    # Audio Configuration
+    TTS_AUDIO_FORMAT: str = "mp3"  # mp3, wav, ogg
+    TTS_AUDIO_QUALITY: str = "128kbps"  # 64, 128, 192, 320
+    TTS_SAMPLE_RATE: int = 22050  # Hz
+    TTS_MONO: bool = True
+    TTS_NORMALIZE_VOLUME: bool = True
+    
+    # Medical Text Processing
+    TTS_MEDICAL_DICT_PATH: str = "/app/data/medical_dict_ita.txt"
+    TTS_PRONUNCIATION_RULES: str = "/app/config/medical_pronunciation.json"
+    TTS_EXPAND_ABBREVIATIONS: bool = True
+    TTS_SSML_ENABLED: bool = True
+    TTS_EMPHASIS_KEYWORDS: bool = True
+    TTS_PAUSE_BETWEEN_CONCEPTS: int = 500  # ms
+    
+    # Notion Integration - Export & TTS
+    NOTION_SYNC_EXPORTS: bool = True
+    NOTION_SYNC_TTS: bool = True
+    NOTION_DB_EXPORT_SESSIONS: Optional[str] = None  # Database export sessions
+    NOTION_DB_TTS_RESULTS: Optional[str] = None  # Database TTS results
+    NOTION_ATTACH_FILES: bool = True  # Adjuntar archivos a páginas
+    NOTION_CREATE_DASHBOARDS: bool = True  # Crear dashboards de exports
+    NOTION_TEMPLATE_EXPORT: str = "export_session"
+    NOTION_TEMPLATE_TTS: str = "tts_collection"
+    NOTION_MAX_FILE_SIZE_MB: int = 50  # Límite Notion
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
