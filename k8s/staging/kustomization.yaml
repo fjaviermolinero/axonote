@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: axonote-staging
+
+namespace: axonote-staging
+
+resources:
+- ../base
+
+patchesStrategicMerge:
+- staging-patches.yaml
+
+replicas:
+- name: axonote-api
+  count: 2
+- name: axonote-web
+  count: 2
+- name: axonote-worker
+  count: 1
+
+images:
+- name: ghcr.io/axonote/axonote-api
+  newTag: develop
+- name: ghcr.io/axonote/axonote-web
+  newTag: develop
+- name: ghcr.io/axonote/axonote-worker
+  newTag: develop
+
+configMapGenerator:
+- name: axonote-config-staging
+  envs:
+  - staging.env
+
+secretGenerator:
+- name: axonote-secrets-staging
+  envs:
+  - staging-secrets.env

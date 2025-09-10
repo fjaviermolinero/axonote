@@ -1,0 +1,49 @@
+# Staging-specific resource adjustments
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: axonote-staging
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axonote-api
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        - name: LOG_LEVEL
+          value: "DEBUG"
+        - name: DEBUG
+          value: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axonote-worker
+spec:
+  template:
+    spec:
+      containers:
+      - name: worker
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: "1"
+        command: ["celery", "worker", "-A", "app.workers.celery_app", "--loglevel=debug", "--concurrency=2"]

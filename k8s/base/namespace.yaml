@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: axonote
+  labels:
+    name: axonote
+    app.kubernetes.io/name: axonote
+    app.kubernetes.io/component: namespace

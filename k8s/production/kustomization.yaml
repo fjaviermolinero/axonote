@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: axonote-production
+
+namespace: axonote
+
+resources:
+- ../base
+
+patchesStrategicMerge:
+- production-patches.yaml
+
+replicas:
+- name: axonote-api
+  count: 5
+- name: axonote-web
+  count: 4
+- name: axonote-worker
+  count: 3
+
+images:
+- name: ghcr.io/axonote/axonote-api
+  newTag: v1.0.0
+- name: ghcr.io/axonote/axonote-web
+  newTag: v1.0.0
+- name: ghcr.io/axonote/axonote-worker
+  newTag: v1.0.0
+
+configMapGenerator:
+- name: axonote-config-production
+  envs:
+  - production.env
+
+secretGenerator:
+- name: axonote-secrets-production
+  envs:
+  - production-secrets.env

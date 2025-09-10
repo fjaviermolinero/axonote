@@ -7,6 +7,9 @@
 import { useEffect, useState } from 'react';
 import { useAppStore, type ClassSession } from '@/lib/stores/app';
 import { Button } from '@/components/ui/Button';
+import { MedicalCard } from '@/components/ui/MedicalCard';
+import { MedicalBadge, EstadoBadge, EspecialidadBadge, ConfianzaBadge } from '@/components/ui/MedicalBadge';
+import { SyncIndicator, useSyncStatus } from '@/components/ui/SyncIndicator';
 import { formatDuration, formatRelativeDate, getInitials, getColorFromText } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -74,6 +77,7 @@ export default function HomePage() {
   const { classSessions, isLoading, loadClassSessions, favoriteSubjects } = useAppStore();
   const [filter, setFilter] = useState<string>('all');
   const [sessions, setSessions] = useState<ClassSession[]>(SAMPLE_SESSIONS);
+  const syncStatus = useSyncStatus();
 
   useEffect(() => {
     // loadClassSessions();
@@ -113,10 +117,13 @@ export default function HomePage() {
             </div>
             
             {/* Indicador de sincronización */}
-            <div className="sync-indicator">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-              <span className="text-sm text-gray-700">Sincronizado</span>
-            </div>
+            <SyncIndicator
+              status={syncStatus.status}
+              pendingCount={syncStatus.pendingCount}
+              lastSync={syncStatus.lastSync}
+              position="inline"
+              showDetails={false}
+            />
           </div>
         </div>
       </header>
@@ -205,77 +212,37 @@ export default function HomePage() {
             </div>
           ) : (
             filteredSessions.map((session) => (
-              <div key={session.id} className="medical-card">
-                <div className="flex items-start space-x-4">
-                  {/* Avatar del profesor */}
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-sm ${getColorFromText(session.profesor_text)}`}>
-                    {getInitials(session.profesor_text)}
+              <MedicalCard
+                key={session.id}
+                title={session.tema}
+                asignatura={session.asignatura}
+                profesor={session.profesor_text}
+                fecha={formatRelativeDate(session.created_at)}
+                duracion={session.duracion_sec ? formatDuration(session.duracion_sec) : undefined}
+                estado={session.estado_pipeline as any}
+                confianza_asr={session.confianza_asr}
+                confianza_llm={session.confianza_llm}
+                tags={['Medicina', 'Clase']}
+                onClick={() => {
+                  console.log('Clicked session:', session.id);
+                }}
+                onPlay={session.estado_pipeline === 'completed' ? () => {
+                  console.log('Play session:', session.id);
+                } : undefined}
+                onMore={() => {
+                  console.log('More options:', session.id);
+                }}
+              >
+                {/* Acciones adicionales */}
+                {session.notion_page_id && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l8.893-.548c.16 0 .027-.133-.014-.146L14.86 3.094c-.254-.146-.547-.306-1.026-.306l-8.893.533c-.427.027-.573.306-.48.88zm.24 2.507v13.336c0 .746.373 1.026 1.013.986l9.893-.56c.64-.053.746-.426.746-.96V6.262c0-.533-.16-.8-.533-.773l-10.24.586c-.426.027-.88.213-.88.64zm8.853-.693c.08.4 0 .8-.4.853l-.64.133v9.386c-.56.293-1.073.426-1.466.426-.746 0-.933-.226-1.466-.906l-4.533-7.12v6.88c0 0-.293.906-1.293.906h-1.733s-.4-.226-.4-.906V7.995c0-.533.24-.853.746-.906l2.053-.133c.746 0 1.2.226 1.6.906l4.64 7.253V8.248c0-.533.213-.8.693-.826l1.733-.4z" />
+                    </svg>
+                    <span>Sincronizado con Notion</span>
                   </div>
-                  
-                  {/* Contenido */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 text-lg leading-tight">
-                          {session.tema}
-                        </h3>
-                        <p className="text-primary-600 font-medium mt-1">
-                          {session.asignatura}
-                        </p>
-                        <p className="text-gray-600 text-sm mt-1">
-                          {session.profesor_text}
-                        </p>
-                      </div>
-                      
-                      {/* Estado */}
-                      <span className={`medical-badge ${getStatusColor(session.estado_pipeline)}`}>
-                        {getStatusText(session.estado_pipeline)}
-                      </span>
-                    </div>
-                    
-                    {/* Metadatos */}
-                    <div className="flex items-center space-x-4 mt-4 text-sm text-gray-500">
-                      <span className="flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        {session.duracion_sec ? formatDuration(session.duracion_sec) : 'Sin duración'}
-                      </span>
-                      
-                      <span className="flex items-center">
-                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                        {formatRelativeDate(session.created_at)}
-                      </span>
-                      
-                      {session.confianza_asr && (
-                        <span className="flex items-center">
-                          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                          </svg>
-                          {Math.round(session.confianza_asr * 100)}% precisión
-                        </span>
-                      )}
-                    </div>
-                    
-                    {/* Acciones */}
-                    <div className="flex space-x-2 mt-4">
-                      <Button size="sm" variant="outline">
-                        Ver detalles
-                      </Button>
-                      {session.notion_page_id && (
-                        <Button size="sm" variant="ghost">
-                          <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M4.459 4.208c.746.606 1.026.56 2.428.466l8.893-.548c.16 0 .027-.133-.014-.146L14.86 3.094c-.254-.146-.547-.306-1.026-.306l-8.893.533c-.427.027-.573.306-.48.88zm.24 2.507v13.336c0 .746.373 1.026 1.013.986l9.893-.56c.64-.053.746-.426.746-.96V6.262c0-.533-.16-.8-.533-.773l-10.24.586c-.426.027-.88.213-.88.64zm8.853-.693c.08.4 0 .8-.4.853l-.64.133v9.386c-.56.293-1.073.426-1.466.426-.746 0-.933-.226-1.466-.906l-4.533-7.12v6.88c0 0-.293.906-1.293.906h-1.733s-.4-.226-.4-.906V7.995c0-.533.24-.853.746-.906l2.053-.133c.746 0 1.2.226 1.6.906l4.64 7.253V8.248c0-.533.213-.8.693-.826l1.733-.4z" />
-                          </svg>
-                          Notion
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                )}
+              </MedicalCard>
             ))
           )}
         </div>

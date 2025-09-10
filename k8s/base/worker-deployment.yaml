@@ -1,0 +1,171 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axonote-worker
+  namespace: axonote
+  labels:
+    app: axonote-worker
+    component: worker
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: axonote-worker
+  template:
+    metadata:
+      labels:
+        app: axonote-worker
+        component: worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: worker
+        image: ghcr.io/axonote/axonote-worker:latest
+        imagePullPolicy: Always
+        command: ["celery", "worker", "-A", "app.workers.celery_app", "--loglevel=info", "--concurrency=2"]
+        envFrom:
+        - configMapRef:
+            name: axonote-config
+        - secretRef:
+            name: axonote-secrets
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+            nvidia.com/gpu: "1"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+            nvidia.com/gpu: "1"
+        livenessProbe:
+          exec:
+            command:
+            - celery
+            - inspect
+            - ping
+            - -A
+            - app.workers.celery_app
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - celery
+            - inspect
+            - active
+            - -A
+            - app.workers.celery_app
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        volumeMounts:
+        - name: models-cache
+          mountPath: /models
+        - name: temp-processing
+          mountPath: /tmp/processing
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: models-cache
+        persistentVolumeClaim:
+          claimName: models-pvc
+      - name: temp-processing
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: logs
+        emptyDir: {}
+      nodeSelector:
+        accelerator: nvidia-tesla-gpu
+        kubernetes.io/arch: amd64
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+---
+# Beat Scheduler for periodic tasks
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: axonote-beat
+  namespace: axonote
+  labels:
+    app: axonote-beat
+    component: scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: axonote-beat
+  template:
+    metadata:
+      labels:
+        app: axonote-beat
+        component: scheduler
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: beat
+        image: ghcr.io/axonote/axonote-worker:latest
+        imagePullPolicy: Always
+        command: ["celery", "beat", "-A", "app.workers.celery_app", "--loglevel=info"]
+        envFrom:
+        - configMapRef:
+            name: axonote-config
+        - secretRef:
+            name: axonote-secrets
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: beat-schedule
+          mountPath: /app/celerybeat-schedule
+        - name: logs
+          mountPath: /app/logs
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: beat-schedule
+        emptyDir: {}
+      - name: logs
+        emptyDir: {}
+---
+# PVC for ML models
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: models-pvc
+  namespace: axonote
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi

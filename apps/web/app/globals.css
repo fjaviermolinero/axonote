@@ -51,6 +51,103 @@
   }
 }
 
+/* Componentes médicos especializados */
+@layer components {
+  .medical-card {
+    @apply transition-all duration-300 hover:shadow-lg hover:scale-[1.02];
+    background: linear-gradient(145deg, #ffffff 0%, #fafbfc 100%);
+  }
+
+  .medical-card:hover {
+    box-shadow: 
+      0 10px 25px -3px rgba(59, 130, 246, 0.1),
+      0 4px 6px -2px rgba(59, 130, 246, 0.05);
+  }
+
+  .medical-badge {
+    @apply inline-flex items-center font-medium rounded-full border transition-all;
+    font-feature-settings: 'tnum' on, 'lnum' on;
+  }
+
+  .recording-controls {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .sync-indicator {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+/* Animaciones médicas */
+@layer utilities {
+  @keyframes pulse-medical {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.8;
+      transform: scale(1.05);
+    }
+  }
+
+  .animate-pulse-medical {
+    animation: pulse-medical 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Indicadores de estado médico */
+  .medical-status-indicator {
+    @apply relative;
+  }
+
+  .medical-status-indicator::before {
+    content: '';
+    @apply absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 border-white;
+  }
+
+  .medical-status-indicator.status-active::before {
+    @apply bg-green-500;
+    animation: pulse-medical 2s infinite;
+  }
+
+  .medical-status-indicator.status-processing::before {
+    @apply bg-yellow-500;
+  }
+
+  .medical-status-indicator.status-error::before {
+    @apply bg-red-500;
+  }
+
+  /* Mejoras para accesibilidad médica */
+  @media (prefers-reduced-motion: reduce) {
+    .medical-card,
+    .medical-badge,
+    .recording-controls,
+    .sync-indicator {
+      transition: none;
+    }
+    
+    .animate-pulse-medical {
+      animation: none;
+    }
+  }
+
+  /* Modo oscuro para aplicaciones médicas */
+  @media (prefers-color-scheme: dark) {
+    .medical-card {
+      background: linear-gradient(145deg, #1f2937 0%, #111827 100%);
+      @apply border-gray-700;
+    }
+    
+    .recording-controls {
+      background: linear-gradient(180deg, rgba(31, 41, 55, 0.95) 0%, rgba(17, 24, 39, 0.98) 100%);
+    }
+  }
+}
+
 /* Animaciones personalizadas para aplicación médica */
 @layer utilities {
   .animate-recording {

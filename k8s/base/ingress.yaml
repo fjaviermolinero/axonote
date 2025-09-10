@@ -1,0 +1,100 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: axonote-ingress
+  namespace: axonote
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "https://axonote.com, https://www.axonote.com"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Requested-With"
+spec:
+  tls:
+  - hosts:
+    - axonote.com
+    - www.axonote.com
+    - api.axonote.com
+    secretName: axonote-tls
+  rules:
+  # Frontend
+  - host: axonote.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: axonote-web-service
+            port:
+              number: 80
+  - host: www.axonote.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: axonote-web-service
+            port:
+              number: 80
+  # API
+  - host: api.axonote.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: axonote-api-service
+            port:
+              number: 80
+---
+# Staging Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: axonote-staging-ingress
+  namespace: axonote-staging
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-staging
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/basic-auth-secret: staging-auth
+    nginx.ingress.kubernetes.io/auth-realm: "AxoNote Staging - Authentication Required"
+spec:
+  tls:
+  - hosts:
+    - staging.axonote.com
+    - api-staging.axonote.com
+    secretName: axonote-staging-tls
+  rules:
+  - host: staging.axonote.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: axonote-web-service
+            port:
+              number: 80
+  - host: api-staging.axonote.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: axonote-api-service
+            port:
+              number: 80

@@ -1,0 +1,412 @@
+name: AxoNote CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ============================================================================
+  # TESTING PIPELINE
+  # ============================================================================
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: axonote_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Cache Poetry dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pypoetry
+        key: ${{ runner.os }}-poetry-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install Poetry
+      run: |
+        curl -sSL https://install.python-poetry.org | python3 -
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+    - name: Configure Poetry
+      run: |
+        poetry config virtualenvs.create false
+
+    - name: Install dependencies
+      run: |
+        cd apps/api
+        poetry install --no-dev
+
+    - name: Run linting
+      run: |
+        cd apps/api
+        poetry run ruff check .
+        poetry run mypy app/
+
+    - name: Run backend tests
+      env:
+        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/axonote_test
+        REDIS_URL: redis://localhost:6379/0
+        SECRET_KEY: test-secret-key-for-ci
+        ENVIRONMENT: testing
+      run: |
+        cd apps/api
+        poetry run pytest tests/ -v --cov=app --cov-report=xml
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./apps/api/coverage.xml
+        flags: backend
+        name: backend-coverage
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js 18
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        cache-dependency-path: apps/web/package-lock.json
+
+    - name: Install dependencies
+      run: |
+        cd apps/web
+        npm ci
+
+    - name: Run linting
+      run: |
+        cd apps/web
+        npm run lint
+
+    - name: Run type checking
+      run: |
+        cd apps/web
+        npm run type-check
+
+    - name: Run frontend tests
+      run: |
+        cd apps/web
+        npm run test:ci
+
+    - name: Build application
+      run: |
+        cd apps/web
+        npm run build
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-build
+        path: apps/web/.next
+
+  # ============================================================================
+  # E2E TESTING
+  # ============================================================================
+  test-e2e:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Start services
+      run: |
+        docker-compose -f docker-compose.dev.yml up -d
+        sleep 30  # Wait for services to be ready
+
+    - name: Run E2E tests
+      run: |
+        chmod +x scripts/test_sprint1_e2e_complete.sh
+        ./scripts/test_sprint1_e2e_complete.sh
+
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-test-results
+        path: test_results/
+
+    - name: Stop services
+      if: always()
+      run: |
+        docker-compose -f docker-compose.dev.yml down
+
+  # ============================================================================
+  # SECURITY SCANNING
+  # ============================================================================
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+    - name: Run Bandit security scan (Python)
+      run: |
+        pip install bandit[toml]
+        bandit -r apps/api/app/ -f json -o bandit-report.json || true
+
+    - name: Run npm audit (Node.js)
+      run: |
+        cd apps/web
+        npm audit --audit-level=moderate || true
+
+  # ============================================================================
+  # BUILD DOCKER IMAGES
+  # ============================================================================
+  build-images:
+    runs-on: ubuntu-latest
+    needs: [test-backend, test-frontend]
+    if: github.event_name == 'push'
+    
+    strategy:
+      matrix:
+        image: [api, web, worker]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.image }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./docker/${{ matrix.image }}.Dockerfile
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+  # ============================================================================
+  # DEPLOY TO STAGING
+  # ============================================================================
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-images, test-e2e]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG_STAGING }}" | base64 -d > ~/.kube/config
+
+    - name: Deploy to staging
+      run: |
+        envsubst < k8s/staging/kustomization.yaml | kubectl apply -f -
+        kubectl rollout status deployment/axonote-api -n axonote-staging
+        kubectl rollout status deployment/axonote-web -n axonote-staging
+        kubectl rollout status deployment/axonote-worker -n axonote-staging
+
+    - name: Run staging smoke tests
+      run: |
+        export API_BASE_URL="https://api-staging.axonote.com/api/v1"
+        export FRONTEND_URL="https://staging.axonote.com"
+        ./scripts/test_sprint1_e2e_complete.sh
+
+  # ============================================================================
+  # DEPLOY TO PRODUCTION
+  # ============================================================================
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [deploy-staging]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+
+    - name: Deploy to production
+      run: |
+        envsubst < k8s/production/kustomization.yaml | kubectl apply -f -
+        kubectl rollout status deployment/axonote-api -n axonote-production
+        kubectl rollout status deployment/axonote-web -n axonote-production  
+        kubectl rollout status deployment/axonote-worker -n axonote-production
+
+    - name: Run production health checks
+      run: |
+        export API_BASE_URL="https://api.axonote.com/api/v1"
+        export FRONTEND_URL="https://axonote.com"
+        # Run limited health check tests in production
+        curl -f $API_BASE_URL/health || exit 1
+        curl -f $FRONTEND_URL || exit 1
+
+    - name: Notify deployment success
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: '🚀 AxoNote deployed successfully to production!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ============================================================================
+  # ROLLBACK AUTOMATION
+  # ============================================================================
+  rollback-production:
+    runs-on: ubuntu-latest
+    if: failure() && github.ref == 'refs/heads/main'
+    needs: [deploy-production]
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up kubectl
+      uses: azure/setup-kubectl@v3
+      with:
+        version: 'latest'
+
+    - name: Configure kubectl
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.KUBE_CONFIG_PRODUCTION }}" | base64 -d > ~/.kube/config
+
+    - name: Rollback deployment
+      run: |
+        kubectl rollout undo deployment/axonote-api -n axonote-production
+        kubectl rollout undo deployment/axonote-web -n axonote-production
+        kubectl rollout undo deployment/axonote-worker -n axonote-production
+        
+        kubectl rollout status deployment/axonote-api -n axonote-production
+        kubectl rollout status deployment/axonote-web -n axonote-production
+        kubectl rollout status deployment/axonote-worker -n axonote-production
+
+    - name: Notify rollback
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: '⚠️ AxoNote production deployment failed and was rolled back!'
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+  # ============================================================================
+  # MONITORING & ALERTS
+  # ============================================================================
+  post-deployment-monitoring:
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Wait for service stabilization
+      run: sleep 300  # Wait 5 minutes
+
+    - name: Check application health
+      run: |
+        # Health check endpoints
+        curl -f https://api.axonote.com/api/v1/health || exit 1
+        curl -f https://api.axonote.com/api/v1/health/db || exit 1
+        curl -f https://api.axonote.com/api/v1/health/redis || exit 1
+        
+        # Performance check
+        response_time=$(curl -o /dev/null -s -w '%{time_total}' https://api.axonote.com/api/v1/health)
+        if (( $(echo "$response_time > 2.0" | bc -l) )); then
+          echo "High response time detected: ${response_time}s"
+          exit 1
+        fi
+
+    - name: Trigger monitoring alerts
+      run: |
+        # Send metrics to monitoring system
+        curl -X POST "https://monitoring.axonote.com/api/deployment" \
+          -H "Authorization: Bearer ${{ secrets.MONITORING_TOKEN }}" \
+          -d '{"status": "success", "version": "${{ github.sha }}", "timestamp": "'$(date -Iseconds)'"}'

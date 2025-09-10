@@ -1,0 +1,222 @@
+# Prometheus ServiceMonitor for API
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: axonote-api-metrics
+  namespace: axonote
+  labels:
+    app: axonote-api
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: axonote-api
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+# Prometheus ServiceMonitor for Workers
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: axonote-worker-metrics
+  namespace: axonote
+  labels:
+    app: axonote-worker
+    component: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: axonote-worker
+  endpoints:
+  - port: metrics
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
+---
+# Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: axonote-dashboard
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  axonote-dashboard.json: |
+    {
+      "dashboard": {
+        "id": null,
+        "title": "AxoNote Production Dashboard",
+        "tags": ["axonote", "medical", "ai"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "id": 1,
+            "title": "API Response Time",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.95, http_request_duration_seconds_bucket{job=\"axonote-api\"})",
+                "legendFormat": "95th percentile"
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "title": "Processing Jobs",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "celery_tasks_total{state=\"SUCCESS\"}",
+                "legendFormat": "Completed"
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "title": "Active Users",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "active_sessions_total",
+                "legendFormat": "Active Sessions"
+              }
+            ]
+          },
+          {
+            "id": 4,
+            "title": "Error Rate",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "rate(http_requests_total{status=~\"5..\"}[5m])",
+                "legendFormat": "5xx Errors"
+              }
+            ]
+          },
+          {
+            "id": 5,
+            "title": "GPU Utilization",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "nvidia_gpu_utilization_percent",
+                "legendFormat": "GPU {{gpu}}"
+              }
+            ]
+          },
+          {
+            "id": 6,
+            "title": "Memory Usage",
+            "type": "graph",
+            "targets": [
+              {
+                "expr": "container_memory_usage_bytes{pod=~\"axonote-.*\"} / container_spec_memory_limit_bytes * 100",
+                "legendFormat": "{{pod}}"
+              }
+            ]
+          }
+        ],
+        "time": {
+          "from": "now-1h",
+          "to": "now"
+        },
+        "refresh": "30s"
+      }
+    }
+---
+# PrometheusRule for Alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: axonote-alerts
+  namespace: axonote
+  labels:
+    app: axonote
+    component: monitoring
+spec:
+  groups:
+  - name: axonote.rules
+    rules:
+    # High error rate
+    - alert: AxoNoteHighErrorRate
+      expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+      for: 2m
+      labels:
+        severity: critical
+      annotations:
+        summary: "High error rate detected"
+        description: "Error rate is {{ $value }} errors per second"
+    
+    # High response time
+    - alert: AxoNoteHighResponseTime
+      expr: histogram_quantile(0.95, http_request_duration_seconds_bucket) > 2
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "High response time detected"
+        description: "95th percentile response time is {{ $value }}s"
+    
+    # Processing queue too long
+    - alert: AxoNoteLongProcessingQueue
+      expr: celery_queue_length > 100
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Processing queue is getting long"
+        description: "{{ $value }} jobs in queue"
+    
+    # Pod memory usage high
+    - alert: AxoNotePodHighMemory
+      expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod memory usage is high"
+        description: "Pod {{ $labels.pod }} memory usage is {{ $value | humanizePercentage }}"
+    
+    # Pod CPU usage high
+    - alert: AxoNotePodHighCPU
+      expr: rate(container_cpu_usage_seconds_total[5m]) > 0.8
+      for: 10m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Pod CPU usage is high"
+        description: "Pod {{ $labels.pod }} CPU usage is {{ $value | humanizePercentage }}"
+    
+    # Database connection failures
+    - alert: AxoNoteDatabaseDown
+      expr: pg_up == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "PostgreSQL database is down"
+        description: "Database connection failed"
+    
+    # Redis down
+    - alert: AxoNoteRedisDown
+      expr: redis_up == 0
+      for: 1m
+      labels:
+        severity: critical
+      annotations:
+        summary: "Redis cache is down"
+        description: "Redis connection failed"
+    
+    # GPU utilization low (indicates potential issues)
+    - alert: AxoNoteGPUNotUtilized
+      expr: nvidia_gpu_utilization_percent < 5
+      for: 15m
+      labels:
+        severity: warning
+      annotations:
+        summary: "GPU not being utilized"
+        description: "GPU utilization is only {{ $value }}% - check worker health"
