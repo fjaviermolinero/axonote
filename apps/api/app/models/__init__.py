@@ -26,6 +26,10 @@ from .micro_memo import MicroMemo
 from .micro_memo_collection import MicroMemoCollection
 from .export_session import ExportSession
 from .tts_result import TTSResult
+from .sesion_metrica import SesionMetrica
+from .metrica_procesamiento import MetricaProcesamiento
+from .metrica_calidad import MetricaCalidad
+from .metrica_sistema import MetricaSistema
 
 __all__ = [
     "ClassSession",
@@ -55,5 +59,9 @@ __all__ = [
     "MicroMemo",
     "MicroMemoCollection",
     "ExportSession",
-    "TTSResult"
+    "TTSResult",
+    "SesionMetrica",
+    "MetricaProcesamiento",
+    "MetricaCalidad",
+    "MetricaSistema"
 ]
