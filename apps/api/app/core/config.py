@@ -86,14 +86,77 @@ class Settings(BaseSettings):
     NEXTCLOUD_FOLDER: str = "recordings"
     
     # ==============================================
-    # INTEGRACIÓN NOTION
+    # INTEGRACIÓN NOTION - FASE 8 COMPLETA
     # ==============================================
     
+    # Configuración Básica
     NOTION_TOKEN: Optional[str] = None
+    NOTION_VERSION: str = "2022-06-28"
+    NOTION_WORKSPACE_ID: Optional[str] = None
+    
+    # Databases IDs
     NOTION_DB_CLASSES: Optional[str] = None
     NOTION_DB_SOURCES: Optional[str] = None
     NOTION_DB_TERMS: Optional[str] = None
     NOTION_DB_CARDS: Optional[str] = None
+    NOTION_DB_PROFESSORS: Optional[str] = None
+    NOTION_DB_RESEARCH: Optional[str] = None
+    
+    # Sincronización Automática
+    NOTION_AUTO_SYNC_ENABLED: bool = True
+    NOTION_SYNC_ON_COMPLETION: bool = True
+    NOTION_SYNC_INTERVAL_MINUTES: int = 15
+    NOTION_BATCH_SYNC_SIZE: int = 10
+    
+    # Templates y Estructuras
+    NOTION_DEFAULT_TEMPLATE: str = "clase_magistral"
+    NOTION_AUTO_DETECT_TEMPLATE: bool = True
+    NOTION_CUSTOM_TEMPLATES_PATH: str = "data/notion_templates/"
+    NOTION_TEMPLATE_VALIDATION: str = "strict"  # strict | loose
+    
+    # Gestión de Contenido
+    NOTION_MAX_PAGE_SIZE_MB: int = 50
+    NOTION_MAX_BLOCKS_PER_PAGE: int = 2000
+    NOTION_CONTENT_TRUNCATION: str = "smart"  # smart | hard | none
+    NOTION_PRESERVE_FORMATTING: bool = True
+    
+    # Attachments y Multimedia
+    NOTION_UPLOAD_ATTACHMENTS: bool = True
+    NOTION_MAX_ATTACHMENT_SIZE_MB: int = 50
+    NOTION_ATTACHMENT_STORAGE: str = "hybrid"  # notion | minio | hybrid
+    NOTION_COMPRESS_AUDIO: bool = True
+    NOTION_AUDIO_FORMAT: str = "mp3"
+    
+    # Sincronización Bidireccional
+    NOTION_BIDIRECTIONAL_SYNC: bool = True
+    NOTION_CONFLICT_RESOLUTION: str = "auto"  # auto | manual | overwrite
+    NOTION_CHANGE_DETECTION_INTERVAL: int = 5
+    NOTION_MERGE_STRATEGY: str = "smart"  # smart | overwrite | manual
+    
+    # Performance y Rate Limiting
+    NOTION_REQUESTS_PER_SECOND: float = 3.0
+    NOTION_CONCURRENT_UPLOADS: int = 2
+    NOTION_RETRY_ATTEMPTS: int = 3
+    NOTION_TIMEOUT_SECONDS: int = 30
+    NOTION_CACHE_PAGES: bool = True
+    
+    # Validación y Calidad
+    NOTION_VALIDATE_BEFORE_SYNC: bool = True
+    NOTION_CONTENT_QUALITY_CHECK: bool = True
+    NOTION_DUPLICATE_DETECTION: bool = True
+    NOTION_BACKUP_BEFORE_SYNC: bool = True
+    
+    # Notificaciones y Logs
+    NOTION_SYNC_NOTIFICATIONS: bool = True
+    NOTION_ERROR_NOTIFICATIONS: bool = True
+    NOTION_DETAILED_LOGGING: bool = True
+    NOTION_METRICS_COLLECTION: bool = True
+    
+    # Configuración Avanzada
+    NOTION_API_RETRIES_BACKOFF: str = "exponential"  # linear | exponential
+    NOTION_PARALLEL_PROCESSING: bool = True
+    NOTION_MEMORY_OPTIMIZATION: bool = True
+    NOTION_EXPERIMENTAL_FEATURES: bool = False
     
     # ==============================================
     # CONFIGURACIÓN LLM

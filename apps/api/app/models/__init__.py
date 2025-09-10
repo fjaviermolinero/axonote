@@ -19,6 +19,8 @@ from .research_job import ResearchJob
 from .research_result import ResearchResult
 from .medical_source import MedicalSource
 from .source_cache import SourceCache
+from .notion_sync_record import NotionSyncRecord, NotionWorkspace, NotionConflictResolution
+from .notion_template import NotionTemplate, NotionTemplateInstance, NotionBlockTemplate
 
 __all__ = [
     "ClassSession",
@@ -37,5 +39,11 @@ __all__ = [
     "ResearchJob",
     "ResearchResult",
     "MedicalSource",
-    "SourceCache"
+    "SourceCache",
+    "NotionSyncRecord",
+    "NotionWorkspace", 
+    "NotionConflictResolution",
+    "NotionTemplate",
+    "NotionTemplateInstance",
+    "NotionBlockTemplate"
 ]
