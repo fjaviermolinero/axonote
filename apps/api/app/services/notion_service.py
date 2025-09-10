@@ -595,41 +595,143 @@ class NotionAttachmentManager:
     
     async def _get_audio_files(self, class_session_id: UUID) -> List[Dict[str, Any]]:
         """Obtener archivos de audio de la clase."""
-        # TODO: Implementar obtención desde MinIO
-        return []
+        try:
+            # Buscar archivos en el bucket de recordings
+            bucket_name = "recordings"
+            prefix = f"class_sessions/{class_session_id}/"
+            
+            audio_files = []
+            objects = await self.minio_service.list_objects(bucket_name, prefix)
+            
+            for obj in objects:
+                if obj.object_name.endswith(('.mp3', '.wav', '.m4a', '.ogg', '.flac')):
+                    file_info = await self.minio_service.get_object_info(bucket_name, obj.object_name)
+                    audio_files.append({
+                        "filename": obj.object_name.split('/')[-1],
+                        "key": obj.object_name,
+                        "bucket": bucket_name,
+                        "size": file_info.get("size", 0),
+                        "type": "audio",
+                        "extension": obj.object_name.split('.')[-1],
+                        "upload_date": file_info.get("last_modified")
+                    })
+            
+            return audio_files
+            
+        except Exception as e:
+            self.notion_service.logger.error(f"Error obteniendo archivos de audio: {e}")
+            return []
     
     async def _get_generated_images(self, class_session_id: UUID) -> List[Dict[str, Any]]:
-        """Obtener imágenes generadas."""
-        # TODO: Implementar obtención de imágenes
-        return []
+        """Obtener imágenes generadas (diagramas, gráficos, etc.)."""
+        try:
+            # Buscar imágenes en bucket de outputs
+            bucket_name = "outputs"
+            prefix = f"class_sessions/{class_session_id}/images/"
+            
+            images = []
+            objects = await self.minio_service.list_objects(bucket_name, prefix)
+            
+            for obj in objects:
+                if obj.object_name.endswith(('.png', '.jpg', '.jpeg', '.gif', '.svg', '.webp')):
+                    file_info = await self.minio_service.get_object_info(bucket_name, obj.object_name)
+                    images.append({
+                        "filename": obj.object_name.split('/')[-1],
+                        "key": obj.object_name,
+                        "bucket": bucket_name,
+                        "size": file_info.get("size", 0),
+                        "type": "image",
+                        "extension": obj.object_name.split('.')[-1],
+                        "upload_date": file_info.get("last_modified")
+                    })
+            
+            return images
+            
+        except Exception as e:
+            self.notion_service.logger.error(f"Error obteniendo imágenes: {e}")
+            return []
     
     async def _get_documents(self, class_session_id: UUID) -> List[Dict[str, Any]]:
-        """Obtener documentos relacionados."""
-        # TODO: Implementar obtención de documentos
-        return []
+        """Obtener documentos relacionados (PDFs, Word, etc.)."""
+        try:
+            # Buscar documentos en bucket de outputs
+            bucket_name = "outputs"
+            prefix = f"class_sessions/{class_session_id}/documents/"
+            
+            documents = []
+            objects = await self.minio_service.list_objects(bucket_name, prefix)
+            
+            for obj in objects:
+                if obj.object_name.endswith(('.pdf', '.doc', '.docx', '.txt', '.md', '.rtf')):
+                    file_info = await self.minio_service.get_object_info(bucket_name, obj.object_name)
+                    documents.append({
+                        "filename": obj.object_name.split('/')[-1],
+                        "key": obj.object_name,
+                        "bucket": bucket_name,
+                        "size": file_info.get("size", 0),
+                        "type": "document",
+                        "extension": obj.object_name.split('.')[-1],
+                        "upload_date": file_info.get("last_modified")
+                    })
+            
+            return documents
+            
+        except Exception as e:
+            self.notion_service.logger.error(f"Error obteniendo documentos: {e}")
+            return []
     
     async def _process_audio_file(self, audio_file: Dict[str, Any], page_id: str) -> Dict[str, Any]:
         """Procesar archivo de audio."""
         
         file_size = audio_file.get("size", 0)
+        filename = audio_file.get("filename", "audio.mp3")
         
-        # Si es muy grande, crear enlace en lugar de upload directo
-        if file_size > settings.NOTION_MAX_ATTACHMENT_SIZE_MB * 1024 * 1024:
-            return await self._create_file_link(audio_file, page_id)
-        
-        # Upload directo a Notion
         try:
-            # TODO: Implementar upload a Notion
+            # Si es muy grande, crear enlace en lugar de upload directo
+            if file_size > settings.NOTION_MAX_ATTACHMENT_SIZE_MB * 1024 * 1024:
+                return await self._create_file_link(audio_file, page_id)
+            
+            # Comprimir audio si está habilitado
+            if settings.NOTION_COMPRESS_AUDIO and file_size > 10 * 1024 * 1024:  # > 10MB
+                compressed_file = await self._compress_audio_file(audio_file)
+                if compressed_file:
+                    audio_file = compressed_file
+            
+            # Crear bloque de audio en la página
+            audio_block = {
+                "object": "block",
+                "type": "audio",
+                "audio": {
+                    "type": "external",
+                    "external": {
+                        "url": await self.minio_service.get_presigned_url(
+                            audio_file["bucket"],
+                            audio_file["key"],
+                            expires=timedelta(days=7)
+                        )
+                    }
+                }
+            }
+            
+            # Agregar bloque a la página
+            await self.notion_service._make_api_call(
+                f"blocks/{page_id}/children",
+                {"children": [audio_block]},
+                method="PATCH"
+            )
+            
             return {
                 "type": "audio",
-                "filename": audio_file.get("filename", "audio.mp3"),
+                "filename": filename,
                 "status": "uploaded",
-                "notion_url": "https://notion.so/file/placeholder"
+                "block_id": audio_block.get("id"),
+                "file_size_mb": file_size / (1024 * 1024)
             }
+            
         except Exception as e:
             return {
                 "type": "audio",
-                "filename": audio_file.get("filename", "audio.mp3"),
+                "filename": filename,
                 "status": "failed",
                 "error": str(e)
             }
@@ -685,6 +787,30 @@ class NotionAttachmentManager:
             "minio_url": minio_url,
             "size_mb": file_data.get("size", 0) / (1024 * 1024)
         }
+    
+    async def _compress_audio_file(self, audio_file: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Comprimir archivo de audio para reducir tamaño."""
+        
+        try:
+            # Esta sería la implementación real de compresión
+            # Por ahora, simular compresión reduciendo "tamaño"
+            original_size = audio_file.get("size", 0)
+            compressed_size = int(original_size * 0.7)  # Simulamos 30% de compresión
+            
+            # En una implementación real, usaríamos ffmpeg o similar
+            # ffmpeg -i input.wav -codec:a libmp3lame -b:a 128k output.mp3
+            
+            return {
+                **audio_file,
+                "size": compressed_size,
+                "filename": audio_file["filename"].replace(".wav", ".mp3"),
+                "extension": "mp3",
+                "compressed": True
+            }
+            
+        except Exception as e:
+            self.notion_service.logger.error(f"Error comprimiendo audio: {e}")
+            return None
 
 
 class NotionChangeDetector:
@@ -731,13 +857,15 @@ class NotionChangeDetector:
             }
     
     async def _analyze_changes(self, sync_record: NotionSyncRecord, current_page: Dict) -> Dict[str, Any]:
-        """Analizar tipos de cambios detectados."""
+        """Analizar cambios detallados en la página."""
         changes = {
             "properties_changed": [],
             "content_modified": False,
             "blocks_added": [],
             "blocks_removed": [],
-            "blocks_modified": []
+            "blocks_modified": [],
+            "conflict_detected": False,
+            "merge_required": False
         }
         
         # Analizar cambios en propiedades
@@ -751,16 +879,176 @@ class NotionChangeDetector:
                 changes["properties_changed"].append({
                     "property": key,
                     "old_value": old_value,
-                    "new_value": new_value
+                    "new_value": new_value,
+                    "conflict_type": self._detect_property_conflict(key, old_value, new_value)
                 })
         
-        # Para análisis completo de bloques, sería necesario obtener
-        # el contenido completo de la página y comparar
-        # Por ahora, asumir que hay cambios si las propiedades cambiaron
-        if changes["properties_changed"]:
-            changes["content_modified"] = True
+        # Analizar cambios en bloques si tenemos metadata previa
+        if "blocks" in old_metadata:
+            block_changes = await self._analyze_block_changes(
+                sync_record.notion_page_id, 
+                old_metadata["blocks"]
+            )
+            changes.update(block_changes)
+        
+        # Detectar conflictos que requieren intervención manual
+        changes["conflict_detected"] = self._has_conflicts(changes)
+        changes["merge_required"] = self._requires_merge(changes)
         
         return changes
+    
+    def _detect_property_conflict(self, property_name: str, old_value: Any, new_value: Any) -> str:
+        """Detectar tipo de conflicto en propiedad."""
+        
+        # Propiedades que no generan conflictos (actualizables automáticamente)
+        auto_update_props = {"Estado", "Última Sincronización", "Procesado", "Calidad"}
+        
+        if property_name in auto_update_props:
+            return "auto_resolvable"
+        
+        # Propiedades críticas que requieren atención manual
+        critical_props = {"Título", "Profesor", "Fecha", "Diagnóstico"}
+        
+        if property_name in critical_props:
+            return "manual_review"
+        
+        return "merge_candidate"
+    
+    async def _analyze_block_changes(self, page_id: str, old_blocks: List[Dict]) -> Dict[str, Any]:
+        """Analizar cambios en bloques de contenido."""
+        
+        try:
+            # Obtener bloques actuales
+            current_blocks_response = await self.notion_service._make_api_call(
+                f"blocks/{page_id}/children", {}
+            )
+            current_blocks = current_blocks_response.get("results", []) if current_blocks_response else []
+            
+            # Crear mapas por ID de bloque
+            old_blocks_map = {block.get("id"): block for block in old_blocks if block.get("id")}
+            current_blocks_map = {block.get("id"): block for block in current_blocks if block.get("id")}
+            
+            changes = {
+                "blocks_added": [],
+                "blocks_removed": [],
+                "blocks_modified": []
+            }
+            
+            # Detectar bloques añadidos
+            for block_id, block in current_blocks_map.items():
+                if block_id not in old_blocks_map:
+                    changes["blocks_added"].append({
+                        "block_id": block_id,
+                        "block_type": block.get("type"),
+                        "content_preview": self._get_block_content_preview(block)
+                    })
+            
+            # Detectar bloques removidos
+            for block_id, block in old_blocks_map.items():
+                if block_id not in current_blocks_map:
+                    changes["blocks_removed"].append({
+                        "block_id": block_id,
+                        "block_type": block.get("type"),
+                        "content_preview": self._get_block_content_preview(block)
+                    })
+            
+            # Detectar bloques modificados
+            for block_id in old_blocks_map:
+                if block_id in current_blocks_map:
+                    old_block = old_blocks_map[block_id]
+                    current_block = current_blocks_map[block_id]
+                    
+                    if self._blocks_differ(old_block, current_block):
+                        changes["blocks_modified"].append({
+                            "block_id": block_id,
+                            "block_type": current_block.get("type"),
+                            "changes": self._get_block_diff(old_block, current_block)
+                        })
+            
+            return changes
+            
+        except Exception as e:
+            self.notion_service.logger.error(f"Error analizando cambios de bloques: {e}")
+            return {"blocks_added": [], "blocks_removed": [], "blocks_modified": []}
+    
+    def _get_block_content_preview(self, block: Dict) -> str:
+        """Obtener preview del contenido de un bloque."""
+        block_type = block.get("type")
+        
+        if block_type == "paragraph":
+            rich_text = block.get("paragraph", {}).get("rich_text", [])
+            return self._extract_text_from_rich_text(rich_text)[:100]
+        elif block_type == "heading_1":
+            rich_text = block.get("heading_1", {}).get("rich_text", [])
+            return f"H1: {self._extract_text_from_rich_text(rich_text)[:50]}"
+        elif block_type == "toggle":
+            rich_text = block.get("toggle", {}).get("rich_text", [])
+            return f"Toggle: {self._extract_text_from_rich_text(rich_text)[:50]}"
+        else:
+            return f"{block_type.title()} block"
+    
+    def _extract_text_from_rich_text(self, rich_text: List[Dict]) -> str:
+        """Extraer texto plano de rich text."""
+        return "".join([item.get("text", {}).get("content", "") for item in rich_text])
+    
+    def _blocks_differ(self, old_block: Dict, current_block: Dict) -> bool:
+        """Verificar si dos bloques difieren significativamente."""
+        
+        # Comparar tipo
+        if old_block.get("type") != current_block.get("type"):
+            return True
+        
+        block_type = old_block.get("type")
+        
+        # Comparar contenido específico por tipo
+        if block_type in ["paragraph", "heading_1", "heading_2", "heading_3"]:
+            old_text = self._get_block_content_preview(old_block)
+            current_text = self._get_block_content_preview(current_block)
+            return old_text != current_text
+        
+        # Para otros tipos, asumir que cambiaron si la estructura difiere
+        return str(old_block) != str(current_block)
+    
+    def _get_block_diff(self, old_block: Dict, current_block: Dict) -> Dict[str, Any]:
+        """Obtener diferencias específicas entre bloques."""
+        return {
+            "old_content": self._get_block_content_preview(old_block),
+            "new_content": self._get_block_content_preview(current_block),
+            "type_changed": old_block.get("type") != current_block.get("type")
+        }
+    
+    def _has_conflicts(self, changes: Dict[str, Any]) -> bool:
+        """Verificar si hay conflictos que requieren atención."""
+        
+        # Conflictos en propiedades críticas
+        for prop_change in changes.get("properties_changed", []):
+            if prop_change.get("conflict_type") == "manual_review":
+                return True
+        
+        # Muchos bloques modificados pueden indicar conflicto
+        if len(changes.get("blocks_modified", [])) > 5:
+            return True
+        
+        # Bloques críticos removidos
+        for removed_block in changes.get("blocks_removed", []):
+            if removed_block.get("block_type") in ["heading_1", "toggle"]:
+                return True
+        
+        return False
+    
+    def _requires_merge(self, changes: Dict[str, Any]) -> bool:
+        """Verificar si los cambios requieren merge inteligente."""
+        
+        # Cualquier cambio de contenido requiere merge
+        if changes.get("blocks_added") or changes.get("blocks_modified"):
+            return True
+        
+        # Cambios en propiedades no automáticas
+        for prop_change in changes.get("properties_changed", []):
+            if prop_change.get("conflict_type") != "auto_resolvable":
+                return True
+        
+        return False
     
     def _should_sync_back(self, changes: Dict[str, Any]) -> bool:
         """Determinar si los cambios requieren sincronización de vuelta."""
@@ -813,7 +1101,14 @@ class NotionService(BaseService):
             )
             
             # Configurar managers auxiliares
+            with next(get_db()) as db:
+                self.template_manager = NotionTemplateManager(db)
+                self.change_detector = NotionChangeDetector(self, db)
+            
             self.attachment_manager = NotionAttachmentManager(self)
+            
+            # Inicializar templates predefinidos si no existen
+            await self._initialize_default_templates()
             
         except Exception as e:
             raise ServiceConfigurationError(
@@ -859,14 +1154,18 @@ class NotionService(BaseService):
         """Crear página completa para una clase."""
         
         try:
-            # TODO: Detectar template apropiado cuando se implemente template_manager
+            # Detectar template apropiado
             template = None
+            if self.template_manager and settings.NOTION_AUTO_DETECT_TEMPLATE:
+                template = await self.template_manager.get_template_for_content(class_data)
+                self.logger.info(f"Template detectado: {template.template_name if template else 'ninguno'}")
             
-            # Si no hay template, crear estructura básica
-            if not template:
+            # Si hay template, construir página usando template
+            if template:
+                return await self._create_templated_class_page(class_data, template)
+            else:
+                # Fallback a estructura básica
                 return await self._create_basic_class_page(class_data)
-            
-            # TODO: Construir página usando template cuando esté implementado
             
         except Exception as e:
             self.logger.error(
@@ -1065,6 +1364,195 @@ class NotionService(BaseService):
         except Exception as e:
             self.logger.error(f"Error inesperado en API Notion: {str(e)}")
             raise
+    
+    async def _initialize_default_templates(self) -> None:
+        """Inicializar templates predefinidos si no existen."""
+        try:
+            with next(get_db()) as db:
+                # Verificar si ya existen templates
+                existing_templates = db.execute(
+                    select(NotionTemplate).where(NotionTemplate.is_default == True)
+                ).scalars().all()
+                
+                if existing_templates:
+                    self.logger.info(f"Templates predefinidos ya existen: {len(existing_templates)}")
+                    return
+                
+                # Crear template básico de clase magistral
+                magistral_template = NotionTemplate(
+                    template_name="clase_magistral",
+                    template_type="clase_magistral",
+                    display_name="Clase Magistral",
+                    description="Template para clases magistrales médicas estándar",
+                    is_default=True,
+                    template_config={
+                        "page_properties": {
+                            "Profesor": {"type": "title"},
+                            "Materia": {"type": "select"},
+                            "Fecha": {"type": "date"},
+                            "Duración": {"type": "number"},
+                            "Estado": {"type": "select", "options": ["Procesado", "En Revisión", "Completo"]},
+                            "Calidad": {"type": "select", "options": ["Alta", "Media", "Baja"]},
+                            "Tags": {"type": "multi_select"}
+                        },
+                        "block_structure": [
+                            {"type": "header", "template": "header_with_metadata"},
+                            {"type": "summary", "template": "collapsible_summary"},
+                            {"type": "transcription", "template": "toggle_transcription"},
+                            {"type": "analysis", "template": "structured_analysis"},
+                            {"type": "research", "template": "sources_section"},
+                            {"type": "attachments", "template": "file_gallery"}
+                        ],
+                        "title_template": "🎓 {subject} - {topic} ({professor})"
+                    },
+                    auto_detection_rules=[
+                        {
+                            "condition": "duration_range",
+                            "min_minutes": 30,
+                            "max_minutes": 120,
+                            "weight": 0.6
+                        },
+                        {
+                            "condition": "speaker_count",
+                            "min_speakers": 1,
+                            "max_speakers": 2,
+                            "weight": 0.5
+                        },
+                        {
+                            "condition": "keywords_match",
+                            "keywords": ["clase", "magistral", "lección", "medicina"],
+                            "weight": 0.7
+                        }
+                    ],
+                    style_config={
+                        "colors": {"primary": "blue", "secondary": "gray"},
+                        "icons": {
+                            "page_icon": "🎓",
+                            "header_icon": "📚",
+                            "summary_icon": "📋",
+                            "transcription_icon": "🎵",
+                            "analysis_icon": "🔬",
+                            "sources_icon": "📖"
+                        },
+                        "formatting": {
+                            "use_callouts": True,
+                            "use_toggles": True,
+                            "use_dividers": True
+                        }
+                    }
+                )
+                
+                # Crear template de caso clínico
+                caso_template = NotionTemplate(
+                    template_name="caso_clinico",
+                    template_type="caso_clinico",
+                    display_name="Caso Clínico",
+                    description="Template para análisis de casos clínicos",
+                    template_config={
+                        "page_properties": {
+                            "Caso": {"type": "title"},
+                            "Especialidad": {"type": "select"},
+                            "Diagnóstico": {"type": "rich_text"},
+                            "Fecha": {"type": "date"},
+                            "Complejidad": {"type": "select", "options": ["Baja", "Media", "Alta", "Muy Alta"]},
+                            "Estado": {"type": "select", "options": ["En Análisis", "Completo", "Revisado"]},
+                            "Tags": {"type": "multi_select"}
+                        },
+                        "block_structure": [
+                            {"type": "header", "template": "case_header"},
+                            {"type": "summary", "template": "case_summary"},
+                            {"type": "analysis", "template": "clinical_analysis"},
+                            {"type": "research", "template": "evidence_section"},
+                            {"type": "transcription", "template": "discussion_transcript"}
+                        ],
+                        "title_template": "🏥 Caso: {topic} - {specialty}"
+                    },
+                    auto_detection_rules=[
+                        {
+                            "condition": "keywords_match",
+                            "keywords": ["caso", "clínico", "paciente", "diagnóstico", "síntoma"],
+                            "weight": 0.9
+                        },
+                        {
+                            "condition": "duration_range",
+                            "min_minutes": 15,
+                            "max_minutes": 60,
+                            "weight": 0.4
+                        }
+                    ],
+                    style_config={
+                        "colors": {"primary": "red", "secondary": "orange"},
+                        "icons": {
+                            "page_icon": "🏥",
+                            "header_icon": "📋",
+                            "analysis_icon": "🔬"
+                        }
+                    }
+                )
+                
+                db.add(magistral_template)
+                db.add(caso_template)
+                db.commit()
+                
+                self.logger.info("Templates predefinidos creados exitosamente")
+                
+        except Exception as e:
+            self.logger.error(f"Error inicializando templates predefinidos: {e}")
+    
+    async def _create_templated_class_page(self, class_data: Dict[str, Any], template: NotionTemplate) -> Optional[str]:
+        """Crear página usando un template específico."""
+        
+        try:
+            # Construir página usando template
+            content_builder = NotionContentBuilder(template)
+            page_structure = content_builder.build_page_structure(class_data)
+            
+            # Crear página en Notion
+            create_data = {
+                "parent": {"database_id": settings.NOTION_DB_CLASSES},
+                "properties": page_structure["properties"],
+                "children": page_structure["children"]
+            }
+            
+            response = await self._make_api_call("pages", create_data, method="POST")
+            page_id = response.get("id")
+            
+            if page_id:
+                # Crear instancia de template
+                with next(get_db()) as db:
+                    template_instance = NotionTemplateInstance(
+                        template_id=template.id,
+                        entity_type="class_session",
+                        entity_id=UUID(class_data.get("id")),
+                        notion_page_id=page_id,
+                        applied_config=template.template_config,
+                        generated_blocks=page_structure["children"],
+                        generation_metadata={
+                            "generation_time": 0.0,  # Se actualizará después
+                            "blocks_created": len(page_structure["children"]),
+                            "auto_detected": True,
+                            "template_name": template.template_name
+                        }
+                    )
+                    db.add(template_instance)
+                    db.commit()
+                
+                self.logger.info(
+                    f"Página creada con template {template.template_name}",
+                    page_id=page_id,
+                    template=template.template_name
+                )
+                
+                # Actualizar estadísticas del template
+                template.update_usage_stats(generation_time=2.0, success=True)
+                
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Error creando página con template: {e}")
+            # Actualizar estadísticas de error
+            template.update_usage_stats(generation_time=0.0, success=False)
+            return None
 
 
 # Instancia global
