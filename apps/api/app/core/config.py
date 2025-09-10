@@ -31,7 +31,31 @@ class Settings(BaseSettings):
     
     # Seguridad
     SECRET_KEY: str = secrets.token_urlsafe(32)
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8  # 8 días
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30  # 30 minutos
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # 7 días
+    
+    # Configuración de cifrado
+    ENCRYPTION_KEY: Optional[str] = None  # Se usará SECRET_KEY si no se especifica
+    
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_BURST: int = 10
+    
+    # Configuración de contraseñas
+    PASSWORD_MIN_LENGTH: int = 12
+    PASSWORD_REQUIRE_UPPERCASE: bool = True
+    PASSWORD_REQUIRE_LOWERCASE: bool = True
+    PASSWORD_REQUIRE_NUMBERS: bool = True
+    PASSWORD_REQUIRE_SPECIAL: bool = True
+    
+    # Configuración de sesiones
+    MAX_SESSIONS_PER_USER: int = 5
+    SESSION_CLEANUP_INTERVAL_HOURS: int = 24
+    
+    # Configuración de auditoría
+    AUDIT_LOG_RETENTION_DAYS: int = 365
+    AUDIT_LOG_SENSITIVE_FIELDS: List[str] = ["password", "token", "secret"]
     
     # API Configuration
     API_PORT: int = 8000

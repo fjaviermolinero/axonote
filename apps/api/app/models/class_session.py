@@ -53,6 +53,9 @@ class ClassSession(BaseModel):
     # Relación opcional con entidad Professor (si FEATURE_PROFESSOR_ENTITY=true)
     profesor_id = Column(UUID(as_uuid=True), ForeignKey("professors.id"), nullable=True)
     
+    # Relación con Usuario (propietario de la sesión)
+    usuario_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
+    
     # ==============================================
     # INFORMACIÓN DEL AUDIO
     # ==============================================
@@ -137,6 +140,9 @@ class ClassSession(BaseModel):
     
     # Relación con Professor (opcional)
     profesor = relationship("Professor", back_populates="class_sessions")
+    
+    # Relación con Usuario (propietario)
+    usuario = relationship("Usuario", back_populates="class_sessions")
     
     # Relaciones con entidades relacionadas
     sources = relationship("Source", back_populates="class_session", cascade="all, delete-orphan")
