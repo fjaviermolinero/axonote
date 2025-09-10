@@ -21,7 +21,8 @@ from app.core import settings
 from app.core.database import get_db
 from app.models import (
     ClassSession, NotionSyncRecord, NotionWorkspace, NotionTemplate,
-    NotionTemplateInstance, ResearchResult, LLMAnalysisResult
+    NotionTemplateInstance, ResearchResult, LLMAnalysisResult,
+    OCRResult, MicroMemo, MicroMemoCollection
 )
 from app.services.base import BaseService, ServiceNotAvailableError, ServiceConfigurationError
 from app.services.minio_service import minio_service
@@ -1553,6 +1554,769 @@ class NotionService(BaseService):
             # Actualizar estadísticas de error
             template.update_usage_stats(generation_time=0.0, success=False)
             return None
+    
+    # ===== NUEVOS MÉTODOS FASE 9: OCR Y MICRO-MEMOS =====
+    
+    async def sync_ocr_content(
+        self,
+        ocr_result: OCRResult,
+        update_existing: bool = True
+    ) -> Optional[str]:
+        """
+        Sincroniza contenido OCR con Notion.
+        
+        Args:
+            ocr_result: Resultado de procesamiento OCR
+            update_existing: Si actualizar página existente
+            
+        Returns:
+            ID de la página Notion creada/actualizada
+        """
+        try:
+            if not self.is_configured:
+                await self._setup()
+            
+            # Obtener clase session relacionada
+            class_session = ocr_result.class_session
+            if not class_session:
+                self.logger.warning(f"OCR result {ocr_result.id} no tiene clase asociada")
+                return None
+            
+            # Preparar datos de contenido OCR
+            ocr_content_data = {
+                "type": "ocr_content",
+                "ocr_result_id": str(ocr_result.id),
+                "filename": ocr_result.source_filename,
+                "content_type": ocr_result.content_type,
+                "extracted_text": ocr_result.corrected_text or ocr_result.extracted_text,
+                "confidence_score": ocr_result.confidence_score,
+                "quality_score": ocr_result.quality_score,
+                "is_medical_content": ocr_result.is_medical_content,
+                "medical_terms": ocr_result.medical_terms_detected or [],
+                "pages_processed": ocr_result.pages_processed,
+                "processing_time": ocr_result.processing_time,
+                "document_structure": ocr_result.document_structure,
+                "created_at": ocr_result.created_at
+            }
+            
+            # Buscar página existente de la clase
+            existing_page_id = class_session.notion_page_id
+            
+            if existing_page_id and update_existing:
+                # Añadir sección OCR a página existente
+                return await self._add_ocr_section_to_page(existing_page_id, ocr_content_data)
+            else:
+                # Crear nueva página especializada para OCR
+                return await self._create_ocr_page(class_session, ocr_content_data)
+                
+        except Exception as e:
+            self.logger.error(f"Error sincronizando contenido OCR: {e}")
+            return None
+    
+    async def _add_ocr_section_to_page(
+        self,
+        page_id: str,
+        ocr_data: Dict[str, Any]
+    ) -> Optional[str]:
+        """Añade sección OCR a página existente."""
+        try:
+            # Crear bloques para contenido OCR
+            ocr_blocks = await self._build_ocr_blocks(ocr_data)
+            
+            # Añadir bloques a la página
+            self.client.blocks.children.append(
+                block_id=page_id,
+                children=ocr_blocks
+            )
+            
+            await self.rate_limiter.wait()
+            
+            self.logger.info(f"Sección OCR añadida a página {page_id}")
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Error añadiendo sección OCR: {e}")
+            return None
+    
+    async def _create_ocr_page(
+        self,
+        class_session: ClassSession,
+        ocr_data: Dict[str, Any]
+    ) -> Optional[str]:
+        """Crea nueva página especializada para contenido OCR."""
+        try:
+            # Crear título para página OCR
+            title = f"📄 OCR: {ocr_data['filename']} - {class_session.tema[:50]}"
+            
+            # Propiedades de la página
+            page_properties = {
+                "Título": {
+                    "title": [{"text": {"content": title}}]
+                },
+                "Tipo": {
+                    "select": {"name": "OCR Document"}
+                },
+                "Archivo": {
+                    "rich_text": [{"text": {"content": ocr_data["filename"]}}]
+                },
+                "Tipo Contenido": {
+                    "select": {"name": ocr_data.get("content_type", "documento")}
+                },
+                "Confianza": {
+                    "number": ocr_data.get("confidence_score", 0)
+                },
+                "Páginas": {
+                    "number": ocr_data.get("pages_processed", 1)
+                },
+                "Contenido Médico": {
+                    "checkbox": ocr_data.get("is_medical_content", False)
+                },
+                "Fecha Procesamiento": {
+                    "date": {"start": ocr_data["created_at"].isoformat() if ocr_data.get("created_at") else datetime.now().isoformat()}
+                }
+            }
+            
+            # Crear página
+            page = self.client.pages.create(
+                parent={"database_id": settings.NOTION_DB_CLASSES},
+                properties=page_properties
+            )
+            
+            await self.rate_limiter.wait()
+            
+            page_id = page["id"]
+            
+            # Añadir contenido OCR
+            ocr_blocks = await self._build_ocr_blocks(ocr_data)
+            
+            if ocr_blocks:
+                self.client.blocks.children.append(
+                    block_id=page_id,
+                    children=ocr_blocks
+                )
+                await self.rate_limiter.wait()
+            
+            self.logger.info(f"Página OCR creada: {page_id}")
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Error creando página OCR: {e}")
+            return None
+    
+    async def _build_ocr_blocks(self, ocr_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Construye bloques Notion para contenido OCR."""
+        blocks = []
+        
+        try:
+            # Header principal
+            blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"text": {"content": f"📄 Documento OCR: {ocr_data['filename']}"}}]
+                }
+            })
+            
+            # Información del documento
+            info_text = f"""
+            **Archivo:** {ocr_data['filename']}
+            **Tipo de contenido:** {ocr_data.get('content_type', 'No determinado')}
+            **Páginas procesadas:** {ocr_data.get('pages_processed', 1)}
+            **Confianza OCR:** {ocr_data.get('confidence_score', 0):.1%}
+            **Calidad:** {ocr_data.get('quality_score', 0):.1%}
+            **Contenido médico:** {'Sí' if ocr_data.get('is_medical_content') else 'No'}
+            **Tiempo de procesamiento:** {ocr_data.get('processing_time', 0):.1f}s
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": info_text.strip()}}]
+                }
+            })
+            
+            # Términos médicos detectados
+            if ocr_data.get("medical_terms"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "🏥 Términos Médicos Detectados"}}]
+                    }
+                })
+                
+                terms_text = ", ".join([term.get("term", "") for term in ocr_data["medical_terms"][:20]])
+                if len(ocr_data["medical_terms"]) > 20:
+                    terms_text += f" (+{len(ocr_data['medical_terms']) - 20} más)"
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": terms_text}}]
+                    }
+                })
+            
+            # Texto extraído
+            if ocr_data.get("extracted_text"):
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "📝 Texto Extraído"}}]
+                    }
+                })
+                
+                # Dividir texto en chunks para Notion (máximo 2000 caracteres por bloque)
+                text = ocr_data["extracted_text"]
+                max_chunk_size = 1800
+                
+                for i in range(0, len(text), max_chunk_size):
+                    chunk = text[i:i + max_chunk_size]
+                    blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [{"text": {"content": chunk}}]
+                        }
+                    })
+            
+            return blocks
+            
+        except Exception as e:
+            self.logger.error(f"Error construyendo bloques OCR: {e}")
+            return []
+    
+    async def sync_micromemo_collection(
+        self,
+        collection: MicroMemoCollection,
+        create_individual_pages: bool = False
+    ) -> Optional[str]:
+        """
+        Sincroniza colección de micro-memos con Notion.
+        
+        Args:
+            collection: Colección de micro-memos
+            create_individual_pages: Si crear páginas individuales para cada memo
+            
+        Returns:
+            ID de la página principal de la colección
+        """
+        try:
+            if not self.is_configured:
+                await self._setup()
+            
+            # Crear página principal de colección
+            collection_page_id = await self._create_collection_page(collection)
+            
+            if not collection_page_id:
+                return None
+            
+            # Añadir micro-memos a la página
+            await self._add_micromemos_to_page(collection_page_id, collection.memos)
+            
+            # Crear páginas individuales si se solicita
+            if create_individual_pages:
+                await self._create_individual_memo_pages(collection)
+            
+            self.logger.info(f"Colección {collection.id} sincronizada con Notion")
+            return collection_page_id
+            
+        except Exception as e:
+            self.logger.error(f"Error sincronizando colección micro-memos: {e}")
+            return None
+    
+    async def _create_collection_page(self, collection: MicroMemoCollection) -> Optional[str]:
+        """Crea página principal para colección de micro-memos."""
+        try:
+            # Título de la colección
+            title = f"🎯 {collection.name}"
+            
+            # Propiedades de la página
+            page_properties = {
+                "Título": {
+                    "title": [{"text": {"content": title}}]
+                },
+                "Tipo": {
+                    "select": {"name": "Colección Micro-Memos"}
+                },
+                "Estado": {
+                    "select": {"name": collection.status.title()}
+                },
+                "Total Memos": {
+                    "number": collection.total_memos
+                },
+                "Completitud": {
+                    "number": round(collection.completion_rate * 100, 1)
+                },
+                "Precisión Promedio": {
+                    "number": round(collection.avg_accuracy * 100, 1) if collection.avg_accuracy else 0
+                },
+                "Modo Estudio": {
+                    "select": {"name": collection.study_mode.replace("_", " ").title()}
+                },
+                "Fecha Creación": {
+                    "date": {"start": collection.created_at.isoformat() if collection.created_at else datetime.now().isoformat()}
+                }
+            }
+            
+            # Usar database de micro-memos si existe, sino el de clases
+            database_id = getattr(settings, 'NOTION_DB_MICROMEMOS', settings.NOTION_DB_CLASSES)
+            
+            # Crear página
+            page = self.client.pages.create(
+                parent={"database_id": database_id},
+                properties=page_properties
+            )
+            
+            await self.rate_limiter.wait()
+            
+            page_id = page["id"]
+            
+            # Añadir contenido de información de la colección
+            info_blocks = await self._build_collection_info_blocks(collection)
+            
+            if info_blocks:
+                self.client.blocks.children.append(
+                    block_id=page_id,
+                    children=info_blocks
+                )
+                await self.rate_limiter.wait()
+            
+            self.logger.info(f"Página de colección creada: {page_id}")
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Error creando página de colección: {e}")
+            return None
+    
+    async def _build_collection_info_blocks(self, collection: MicroMemoCollection) -> List[Dict[str, Any]]:
+        """Construye bloques de información para colección."""
+        blocks = []
+        
+        try:
+            # Header principal
+            blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"text": {"content": f"🎯 {collection.name}"}}]
+                }
+            })
+            
+            # Descripción si existe
+            if collection.description:
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": collection.description}}]
+                    }
+                })
+            
+            # Estadísticas de la colección
+            stats_text = f"""
+            **Total de micro-memos:** {collection.total_memos}
+            **Memos estudiados:** {collection.memos_studied}
+            **Memos dominados:** {collection.memos_mastered}
+            **Tasa de completitud:** {collection.completion_rate:.1%}
+            **Precisión promedio:** {collection.avg_accuracy:.1%}
+            **Sesiones totales:** {collection.total_sessions}
+            **Tiempo total de estudio:** {collection.total_study_time} minutos
+            **Racha actual:** {collection.current_streak} días
+            **Mejor racha:** {collection.best_streak} días
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": "📊 Estadísticas"}}]
+                }
+            })
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": stats_text.strip()}}]
+                }
+            })
+            
+            # Distribución por dificultad
+            if collection.difficulty_distribution:
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_3",
+                    "heading_3": {
+                        "rich_text": [{"text": {"content": "📈 Distribución por Dificultad"}}]
+                    }
+                })
+                
+                for difficulty, count in collection.difficulty_distribution.items():
+                    percentage = (count / collection.total_memos * 100) if collection.total_memos > 0 else 0
+                    difficulty_text = f"**{difficulty.replace('_', ' ').title()}:** {count} memos ({percentage:.1f}%)"
+                    
+                    blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [{"text": {"content": difficulty_text}}]
+                        }
+                    })
+            
+            # Configuración de estudio
+            config_text = f"""
+            **Modo de estudio:** {collection.study_mode.replace('_', ' ').title()}
+            **Máximo memos por sesión:** {collection.max_memos_per_session}
+            **Tiempo máximo por sesión:** {collection.max_session_time} minutos
+            **Repetición espaciada:** {'Habilitada' if collection.enable_spaced_repetition else 'Deshabilitada'}
+            **Auto-incluir nuevos memos:** {'Sí' if collection.auto_include_new_memos else 'No'}
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": "⚙️ Configuración"}}]
+                }
+            })
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": config_text.strip()}}]
+                }
+            })
+            
+            return blocks
+            
+        except Exception as e:
+            self.logger.error(f"Error construyendo bloques de colección: {e}")
+            return []
+    
+    async def _add_micromemos_to_page(self, page_id: str, memos: List[MicroMemo]) -> None:
+        """Añade micro-memos como bloques a la página."""
+        try:
+            # Crear header para micro-memos
+            memo_blocks = [{
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": f"🧠 Micro-Memos ({len(memos)})"}}]
+                }
+            }]
+            
+            # Agrupar memos por tipo
+            memos_by_type = {}
+            for memo in memos:
+                memo_type = memo.memo_type
+                if memo_type not in memos_by_type:
+                    memos_by_type[memo_type] = []
+                memos_by_type[memo_type].append(memo)
+            
+            # Añadir memos por tipo
+            for memo_type, type_memos in memos_by_type.items():
+                # Header del tipo
+                memo_blocks.append({
+                    "object": "block",
+                    "type": "heading_3",
+                    "heading_3": {
+                        "rich_text": [{"text": {"content": f"📝 {memo_type.replace('_', ' ').title()} ({len(type_memos)})"}}]
+                    }
+                })
+                
+                # Memos del tipo (máximo 10 por tipo para no sobrecargar)
+                for memo in type_memos[:10]:
+                    memo_text = f"""
+                    **Q:** {memo.question}
+                    **R:** {memo.answer}
+                    **Dificultad:** {memo.difficulty_level.replace('_', ' ').title()}
+                    **Prioridad:** {memo.study_priority}/10
+                    """
+                    
+                    if memo.explanation:
+                        memo_text += f"\n**Explicación:** {memo.explanation}"
+                    
+                    memo_blocks.append({
+                        "object": "block",
+                        "type": "toggle",
+                        "toggle": {
+                            "rich_text": [{"text": {"content": memo.title or memo.question[:50] + "..."}}],
+                            "children": [{
+                                "object": "block",
+                                "type": "paragraph",
+                                "paragraph": {
+                                    "rich_text": [{"text": {"content": memo_text.strip()}}]
+                                }
+                            }]
+                        }
+                    })
+                
+                if len(type_memos) > 10:
+                    memo_blocks.append({
+                        "object": "block",
+                        "type": "paragraph",
+                        "paragraph": {
+                            "rich_text": [{"text": {"content": f"... y {len(type_memos) - 10} micro-memos más de tipo {memo_type}"}}]
+                        }
+                    })
+            
+            # Añadir bloques a la página en chunks
+            chunk_size = 100  # Notion limita a 100 bloques por request
+            for i in range(0, len(memo_blocks), chunk_size):
+                chunk = memo_blocks[i:i + chunk_size]
+                
+                self.client.blocks.children.append(
+                    block_id=page_id,
+                    children=chunk
+                )
+                
+                await self.rate_limiter.wait()
+            
+            self.logger.info(f"Añadidos {len(memos)} micro-memos a página {page_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error añadiendo micro-memos a página: {e}")
+    
+    async def sync_individual_micromemo(self, memo: MicroMemo) -> Optional[str]:
+        """
+        Sincroniza un micro-memo individual con Notion.
+        
+        Args:
+            memo: Micro-memo a sincronizar
+            
+        Returns:
+            ID de la página creada para el memo
+        """
+        try:
+            if not self.is_configured:
+                await self._setup()
+            
+            # Crear página individual para el memo
+            title = f"🧠 {memo.title or memo.question[:50]}"
+            
+            # Propiedades de la página
+            page_properties = {
+                "Título": {
+                    "title": [{"text": {"content": title}}]
+                },
+                "Tipo": {
+                    "select": {"name": "Micro-Memo"}
+                },
+                "Tipo Memo": {
+                    "select": {"name": memo.memo_type.replace("_", " ").title()}
+                },
+                "Dificultad": {
+                    "select": {"name": memo.difficulty_level.replace("_", " ").title()}
+                },
+                "Prioridad": {
+                    "number": memo.study_priority
+                },
+                "Estado": {
+                    "select": {"name": memo.status.title()}
+                },
+                "Veces Estudiado": {
+                    "number": memo.times_studied
+                },
+                "Tasa Éxito": {
+                    "number": round(memo.success_rate * 100, 1) if memo.success_rate else 0
+                },
+                "Especialidad": {
+                    "select": {"name": memo.medical_specialty or "General"}
+                },
+                "Fecha Creación": {
+                    "date": {"start": memo.created_at.isoformat() if memo.created_at else datetime.now().isoformat()}
+                }
+            }
+            
+            # Usar database de micro-memos si existe
+            database_id = getattr(settings, 'NOTION_DB_MICROMEMOS', settings.NOTION_DB_CLASSES)
+            
+            # Crear página
+            page = self.client.pages.create(
+                parent={"database_id": database_id},
+                properties=page_properties
+            )
+            
+            await self.rate_limiter.wait()
+            
+            page_id = page["id"]
+            
+            # Añadir contenido del memo
+            memo_blocks = await self._build_memo_blocks(memo)
+            
+            if memo_blocks:
+                self.client.blocks.children.append(
+                    block_id=page_id,
+                    children=memo_blocks
+                )
+                await self.rate_limiter.wait()
+            
+            self.logger.info(f"Micro-memo {memo.id} sincronizado con Notion: {page_id}")
+            return page_id
+            
+        except Exception as e:
+            self.logger.error(f"Error sincronizando micro-memo individual: {e}")
+            return None
+    
+    async def _build_memo_blocks(self, memo: MicroMemo) -> List[Dict[str, Any]]:
+        """Construye bloques Notion para un micro-memo individual."""
+        blocks = []
+        
+        try:
+            # Header principal
+            blocks.append({
+                "object": "block",
+                "type": "heading_1",
+                "heading_1": {
+                    "rich_text": [{"text": {"content": f"🧠 {memo.title or 'Micro-Memo'}"}}]
+                }
+            })
+            
+            # Información del memo
+            info_text = f"""
+            **Tipo:** {memo.memo_type.replace('_', ' ').title()}
+            **Dificultad:** {memo.difficulty_level.replace('_', ' ').title()}
+            **Prioridad:** {memo.study_priority}/10
+            **Estado:** {memo.status.title()}
+            **Especialidad:** {memo.medical_specialty or 'General'}
+            **Idioma:** {memo.language}
+            **Tiempo estimado:** {memo.estimated_study_time or 5} minutos
+            """
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": info_text.strip()}}]
+                }
+            })
+            
+            # Pregunta
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": "❓ Pregunta"}}]
+                }
+            })
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": memo.question}}]
+                }
+            })
+            
+            # Respuesta
+            blocks.append({
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {
+                    "rich_text": [{"text": {"content": "✅ Respuesta"}}]
+                }
+            })
+            
+            blocks.append({
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {
+                    "rich_text": [{"text": {"content": memo.answer}}]
+                }
+            })
+            
+            # Explicación si existe
+            if memo.explanation:
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_3",
+                    "heading_3": {
+                        "rich_text": [{"text": {"content": "💡 Explicación"}}]
+                    }
+                })
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": memo.explanation}}]
+                    }
+                })
+            
+            # Contexto si existe
+            if memo.context_snippet:
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_3",
+                    "heading_3": {
+                        "rich_text": [{"text": {"content": "📖 Contexto"}}]
+                    }
+                })
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": memo.context_snippet}}]
+                    }
+                })
+            
+            # Tags si existen
+            if memo.tags:
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_3",
+                    "heading_3": {
+                        "rich_text": [{"text": {"content": "🏷️ Tags"}}]
+                    }
+                })
+                
+                tags_text = ", ".join(memo.tags)
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": tags_text}}]
+                    }
+                })
+            
+            # Estadísticas de estudio
+            if memo.times_studied > 0:
+                stats_text = f"""
+                **Veces estudiado:** {memo.times_studied}
+                **Veces correcto:** {memo.times_correct}
+                **Veces incorrecto:** {memo.times_incorrect}
+                **Tasa de éxito:** {memo.success_rate:.1%}
+                **Tiempo promedio:** {memo.avg_response_time:.1f}s si memo.avg_response_time else 'N/A'
+                **Última vez estudiado:** {memo.last_studied.strftime('%d/%m/%Y') if memo.last_studied else 'Nunca'}
+                **Próxima revisión:** {memo.next_review.strftime('%d/%m/%Y') if memo.next_review else 'No programada'}
+                """
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "heading_2",
+                    "heading_2": {
+                        "rich_text": [{"text": {"content": "📊 Estadísticas de Estudio"}}]
+                    }
+                })
+                
+                blocks.append({
+                    "object": "block",
+                    "type": "paragraph",
+                    "paragraph": {
+                        "rich_text": [{"text": {"content": stats_text.strip()}}]
+                    }
+                })
+            
+            return blocks
+            
+        except Exception as e:
+            self.logger.error(f"Error construyendo bloques de memo: {e}")
+            return []
 
 
 # Instancia global

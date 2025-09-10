@@ -144,6 +144,10 @@ class ClassSession(BaseModel):
     cards = relationship("Card", back_populates="class_session", cascade="all, delete-orphan")
     upload_sessions = relationship("UploadSession", back_populates="class_session", cascade="all, delete-orphan")
     
+    # Nuevas relaciones Fase 9
+    ocr_results = relationship("OCRResult", back_populates="class_session", cascade="all, delete-orphan")
+    micro_memos = relationship("MicroMemo", back_populates="class_session", cascade="all, delete-orphan")
+    
     def __repr__(self) -> str:
         return (
             f"<ClassSession("

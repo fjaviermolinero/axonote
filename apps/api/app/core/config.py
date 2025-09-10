@@ -366,6 +366,90 @@ class Settings(BaseSettings):
     ENABLE_SWAGGER: bool = True
     ENABLE_REDOC: bool = True
     
+    # ==============================================
+    # OCR CONFIGURATION - FASE 9
+    # ==============================================
+    
+    # Configuración Básica OCR
+    OCR_ENABLED: bool = True
+    OCR_ENGINE: str = "tesseract"  # tesseract, easyocr, paddle
+    OCR_LANGUAGES: str = "ita+eng"  # Idiomas soportados
+    OCR_CONFIDENCE_THRESHOLD: float = 0.7  # Umbral mínimo de confianza
+    OCR_MAX_FILE_SIZE_MB: int = 50  # Tamaño máximo archivo
+    OCR_SUPPORTED_FORMATS: str = "pdf,png,jpg,jpeg,tiff,bmp"  # Formatos soportados
+    
+    # Tesseract específico
+    TESSERACT_CMD: Optional[str] = None  # Path al ejecutable, None = auto
+    TESSERACT_CONFIG_DIR: Optional[str] = None  # Directorio configuraciones
+    TESSERACT_MEDICAL_DICT: Optional[str] = None  # Diccionario médico italiano
+    
+    # Pre-procesamiento imagen
+    OCR_IMAGE_PREPROCESSING: bool = True
+    OCR_IMAGE_DPI: int = 300
+    OCR_IMAGE_ENHANCE: bool = True
+    OCR_IMAGE_DESKEW: bool = True
+    
+    # Performance OCR
+    OCR_CONCURRENT_PROCESSING: int = 2  # Procesamiento concurrente
+    OCR_CHUNK_SIZE: int = 4  # Páginas por chunk
+    OCR_TIMEOUT_SECONDS: int = 300  # Timeout procesamiento
+    OCR_RETRY_ATTEMPTS: int = 3  # Intentos de retry
+    
+    # Validación calidad
+    OCR_REQUIRE_MEDICAL_VALIDATION: bool = True  # Validar contenido médico
+    OCR_MIN_TEXT_LENGTH: int = 50  # Mínimo texto extraído
+    OCR_MAX_NOISE_RATIO: float = 0.3  # Máximo ratio de ruido
+    
+    # ==============================================
+    # MICRO-MEMOS CONFIGURATION - FASE 9
+    # ==============================================
+    
+    # Configuración Básica
+    MICROMEMOS_ENABLED: bool = True
+    MICROMEMOS_AUTO_GENERATE: bool = True  # Auto-generar tras OCR/LLM
+    MICROMEMOS_MIN_CONFIDENCE: float = 0.6  # Confianza mínima para auto-gen
+    MICROMEMOS_MAX_PER_CONCEPT: int = 3  # Máximo memos por concepto
+    MICROMEMOS_DIFFICULTY_BALANCE: bool = True  # Balancear dificultades
+    
+    # Generación automática
+    MICROMEMOS_AUTO_TRIGGER_OCR: bool = True  # Trigger tras OCR exitoso
+    MICROMEMOS_AUTO_TRIGGER_LLM: bool = True  # Trigger tras análisis LLM
+    MICROMEMOS_AUTO_COLLECTION: bool = True  # Crear colecciones automáticas
+    
+    # Templates y tipos
+    MICROMEMOS_TYPES: str = "definition,concept,process,case,fact,comparison,symptom,treatment"
+    MICROMEMOS_DEFAULT_STUDY_TIME: int = 5  # Minutos por memo
+    MICROMEMOS_SPACED_REPETITION: bool = True  # Habilitar repetición espaciada
+    
+    # Performance
+    MICROMEMOS_BATCH_SIZE: int = 20  # Memos por batch LLM
+    MICROMEMOS_CONCURRENT_GENERATION: int = 1  # Generación concurrente
+    MICROMEMOS_LLM_TIMEOUT: int = 60  # Timeout LLM por memo
+    
+    # Calidad
+    MICROMEMOS_QUALITY_THRESHOLD: float = 0.7  # Umbral calidad mínima
+    MICROMEMOS_REQUIRE_REVIEW_THRESHOLD: float = 0.6  # Umbral para revisión manual
+    MICROMEMOS_AUTO_APPROVE_THRESHOLD: float = 0.9  # Umbral auto-aprobación
+    
+    # ==============================================
+    # NOTION INTEGRATION EXTENSION - FASE 9
+    # ==============================================
+    
+    # Nuevas databases para Fase 9
+    NOTION_DB_OCR_RESULTS: Optional[str] = None  # Database resultados OCR
+    NOTION_DB_MICROMEMOS: Optional[str] = None  # Database micro-memos
+    NOTION_DB_COLLECTIONS: Optional[str] = None  # Database colecciones
+    
+    # Templates OCR
+    NOTION_OCR_TEMPLATE: str = "ocr_content"  # Template para contenido OCR
+    NOTION_SYNC_OCR: bool = True  # Sincronizar contenido OCR
+    NOTION_OCR_PAGE_LIMIT: int = 50  # Límite documentos OCR por página
+    
+    # Templates micro-memos
+    NOTION_SYNC_MICROMEMOS: bool = True  # Sincronizar micro-memos
+    NOTION_MICROMEMO_PAGE_LIMIT: int = 100  # Límite memos por página
+    NOTION_CREATE_INDIVIDUAL_MEMO_PAGES: bool = False  # Páginas individuales por memo
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

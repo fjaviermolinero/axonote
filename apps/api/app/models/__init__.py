@@ -21,6 +21,9 @@ from .medical_source import MedicalSource
 from .source_cache import SourceCache
 from .notion_sync_record import NotionSyncRecord, NotionWorkspace, NotionConflictResolution
 from .notion_template import NotionTemplate, NotionTemplateInstance, NotionBlockTemplate
+from .ocr_result import OCRResult
+from .micro_memo import MicroMemo
+from .micro_memo_collection import MicroMemoCollection
 
 __all__ = [
     "ClassSession",
@@ -45,5 +48,8 @@ __all__ = [
     "NotionConflictResolution",
     "NotionTemplate",
     "NotionTemplateInstance",
-    "NotionBlockTemplate"
+    "NotionBlockTemplate",
+    "OCRResult",
+    "MicroMemo",
+    "MicroMemoCollection"
 ]

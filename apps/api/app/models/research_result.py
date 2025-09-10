@@ -466,6 +466,9 @@ class ResearchResult(BaseModel):
         self.needs_update = True
         self.update_reason = reason
     
+    # Nueva relación Fase 9
+    micro_memos = relationship("MicroMemo", back_populates="source_research")
+    
     def __repr__(self) -> str:
         return (
             f"<ResearchResult(id={self.id}, "

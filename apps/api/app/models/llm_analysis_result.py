@@ -150,6 +150,9 @@ class LLMAnalysisResult(BaseModel):
     transcription_result = relationship("TranscriptionResult", back_populates="llm_analysis_results")
     research_jobs = relationship("ResearchJob", back_populates="llm_analysis", cascade="all, delete-orphan")
     
+    # Nueva relación Fase 9
+    micro_memos = relationship("MicroMemo", back_populates="source_llm_analysis")
+    
     def __repr__(self) -> str:
         return (
             f"<LLMAnalysisResult("
