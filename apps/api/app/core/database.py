@@ -61,6 +61,9 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         finally:
             await session.close()
 
+# Alias para compatibilidad
+get_async_db = get_db
+
 
 async def create_tables():
     """

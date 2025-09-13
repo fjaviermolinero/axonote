@@ -311,8 +311,11 @@ class MultiServiceRateLimiter:
             **kwargs: Configuración adicional
         """
         config = {**self.default_config, **kwargs}
+        # Remover parámetros específicos para evitar duplicados
+        config.pop("requests_per_second", None)
+        is_adaptive = config.pop("adaptive", False)
         
-        if config.get("adaptive", False):
+        if is_adaptive:
             limiter = AdaptiveRateLimiter(requests_per_second, **config)
         else:
             limiter = RateLimiter(requests_per_second, **config)

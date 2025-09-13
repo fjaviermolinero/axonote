@@ -14,7 +14,7 @@ from .security import (
     validate_upload_file,
     sanitize_filename
 )
-from .database import get_db, Base
+from .database import get_db, get_async_db, Base
 
 __all__ = [
     "settings",
@@ -30,5 +30,6 @@ __all__ = [
     "validate_upload_file",
     "sanitize_filename",
     "get_db",
+    "get_async_db",
     "Base"
 ]

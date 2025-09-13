@@ -28,7 +28,7 @@ class ChunkService(BaseService):
     """Servicio para gestión de uploads por chunks con recovery automático."""
     
     def __init__(self):
-        super().__init__()
+        super().__init__("ChunkService")
         self.temp_dir = Path(tempfile.gettempdir()) / "axonote_chunks"
         self.max_chunk_size = settings.MAX_CHUNK_SIZE_MB * 1024 * 1024  # MB a bytes
         self.session_timeout_hours = 24

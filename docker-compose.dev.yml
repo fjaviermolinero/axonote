@@ -69,12 +69,12 @@ services:
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=recordings
       - MINIO_SECURE=false
-      - CORS_ORIGINS=http://localhost:3000
+      - CORS_ORIGINS=http://localhost:3030
     volumes:
       - ./apps/api:/app
       - ./scripts:/scripts
     ports:
-      - "8000:8000"
+      - "8888:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -119,12 +119,12 @@ services:
     container_name: axonote_web_dev
     environment:
       - NODE_ENV=development
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=http://localhost:8888
     volumes:
       - ./apps/web:/app
       - /app/node_modules
     ports:
-      - "3000:3000"
+      - "3030:3000"
     command: ["npm", "run", "dev"]
 
   # LM Studio (comentado para desarrollo inicial)

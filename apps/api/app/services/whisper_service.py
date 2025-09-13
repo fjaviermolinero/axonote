@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-from faster_whisper import WhisperModel
+# from faster_whisper import WhisperModel  # Temporalmente deshabilitado por problemas de contenedor
 from pydantic import BaseModel
 
 from app.core import api_logger, settings
@@ -67,8 +67,8 @@ class WhisperService(BaseService):
     """
 
     def __init__(self):
-        super().__init__()
-        self.modelo_whisper: Optional[WhisperModel] = None
+        super().__init__("WhisperService")
+        self.modelo_whisper: Optional[Any] = None  # Optional[WhisperModel] temporalmente deshabilitado
         self.device: str = "cuda" if torch.cuda.is_available() else "cpu"
         self.compute_type: str = "float16" if self.device == "cuda" else "int8"
         self.modelo_size: str = settings.WHISPER_MODEL
@@ -117,8 +117,8 @@ class WhisperService(BaseService):
                 "without_timestamps": False,
                 "max_initial_timestamp": 1.0,
                 "word_timestamps": True,
-                "prepend_punctuations": "\"'"¿([{-",
-                "append_punctuations": "\"'.。,，!！?？:：")]}、",
+                "prepend_punctuations": "\"'¿([{-",
+                "append_punctuations": "\"'.。,，!！?？:：\")]}、",
                 "vad_filter": True,
                 "vad_parameters": {
                     "threshold": 0.5,
@@ -229,16 +229,18 @@ class WhisperService(BaseService):
                     "num_workers": 1
                 })
             
-            self.modelo_whisper = WhisperModel(
-                self.modelo_size,
-                **model_kwargs
-            )
+            # self.modelo_whisper = WhisperModel(
+            #     self.modelo_size,
+            #     **model_kwargs
+            # )
+            self.modelo_whisper = None  # Temporalmente deshabilitado
             
             # Test de carga exitosa
-            info = self.modelo_whisper.get_model_info()
+            # info = self.modelo_whisper.get_model_info()  # Temporalmente deshabilitado
             self.logger.info(
-                "Modelo Whisper cargado exitosamente",
-                modelo_info=info
+                "Modelo Whisper cargado exitosamente (simulado)",
+                modelo=self.modelo_size,
+                device=self.device
             )
             
         except Exception as e:

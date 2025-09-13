@@ -297,7 +297,7 @@ class MicroMemo(BaseModel):
     generation_metadata = Column(JSON, nullable=True)
     
     # Metadatos adicionales flexibles
-    metadata = Column(JSON, nullable=True, default=dict)
+    memo_metadata = Column(JSON, nullable=True, default=dict)
     
     # Versión del micro-memo (para tracking de cambios)
     version = Column(Integer, nullable=False, default=1)

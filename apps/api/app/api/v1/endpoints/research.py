@@ -533,8 +533,8 @@ async def get_research_summary(
 async def research_single_term(
     term: str,
     config: Dict[str, Any],
-    context: Optional[str] = None,
     background_tasks: BackgroundTasks,
+    context: Optional[str] = None,
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """

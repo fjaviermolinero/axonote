@@ -12,6 +12,16 @@ from typing import Dict, List, Optional, Any
 logger = logging.getLogger(__name__)
 
 
+class ServiceNotAvailableError(Exception):
+    """Excepción lanzada cuando un servicio no está disponible."""
+    pass
+
+
+class ServiceConfigurationError(Exception):
+    """Excepción lanzada cuando hay un error de configuración del servicio."""
+    pass
+
+
 class BaseService(ABC):
     """
     Clase base abstracta para todos los servicios de Axonote.

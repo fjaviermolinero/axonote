@@ -90,7 +90,7 @@ def full_post_processing_pipeline(
         
         # 1. Corrección ASR (60-70%)
         logger.info("Ejecutando corrección ASR")
-        correction_result = await asr_correction_task.apply_async(
+        correction_result = asr_correction_task.apply_async(
             args=[transcription.texto_completo, config.get("correction_config", {})],
             queue="post_processing"
         ).get()
@@ -98,7 +98,7 @@ def full_post_processing_pipeline(
         
         # 2. NER Médico (70-75%)
         logger.info("Ejecutando NER médico")
-        ner_result = await medical_ner_task.apply_async(
+        ner_result = medical_ner_task.apply_async(
             args=[correction_result["corrected_text"], config.get("ner_config", {})],
             queue="post_processing"
         ).get()
@@ -107,7 +107,7 @@ def full_post_processing_pipeline(
         # 3. Análisis de estructura (75-80%)
         logger.info("Ejecutando análisis de estructura")
         diarization_data = diarization.resultado_completo if diarization else {}
-        structure_result = await structure_analysis_task.apply_async(
+        structure_result = structure_analysis_task.apply_async(
             args=[correction_result["corrected_text"], diarization_data, config.get("structure_config", {})],
             queue="post_processing"
         ).get()
@@ -115,7 +115,7 @@ def full_post_processing_pipeline(
         
         # 4. Análisis LLM (80-90%)
         logger.info("Ejecutando análisis LLM")
-        llm_result = await llm_analysis_task.apply_async(
+        llm_result = llm_analysis_task.apply_async(
             args=[
                 correction_result["corrected_text"],
                 diarization_data,

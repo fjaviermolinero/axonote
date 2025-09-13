@@ -30,7 +30,7 @@ class LearningSession(Base):
     effectiveness_score = Column(Float)  # [0-1] score de efectividad
     engagement_score = Column(Float)     # [0-1] score de engagement
     attention_score = Column(Float)      # [0-1] score de atención
-    metadata = Column(JSONB, default={})
+    session_metadata = Column(JSONB, default={})
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     
     # Relationships
@@ -72,7 +72,7 @@ class KnowledgeConcept(Base):
     medical_specialty = Column(String(100))
     prerequisites = Column(JSONB, default=[])  # Array de concept_ids
     learning_objectives = Column(ARRAY(Text))
-    metadata = Column(JSONB, default={})
+    session_metadata = Column(JSONB, default={})
     created_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     
     # Relationships
@@ -208,7 +208,7 @@ class Conversation(Base):
     conversation_state = Column(JSONB, default={})  # Estado actual de la conversación
     started_at = Column(TIMESTAMP(timezone=True), server_default=func.now())
     ended_at = Column(TIMESTAMP(timezone=True))
-    metadata = Column(JSONB, default={})
+    session_metadata = Column(JSONB, default={})
     
     # Relationships
     user = relationship("User", back_populates="conversations")
@@ -228,7 +228,7 @@ class ConversationMessage(Base):
     message_type = Column(String(20), nullable=False)  # 'text', 'audio', 'multimodal'
     text_content = Column(Text)
     audio_path = Column(String(500))  # Path al archivo de audio
-    metadata = Column(JSONB, default={})  # Metadatos adicionales (emociones, conceptos, etc.)
+    session_metadata = Column(JSONB, default={})  # Metadatos adicionales (emociones, conceptos, etc.)
     timestamp = Column(TIMESTAMP(timezone=True), server_default=func.now())
     
     # Relationships

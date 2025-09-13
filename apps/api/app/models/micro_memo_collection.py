@@ -218,7 +218,7 @@ class MicroMemoCollection(BaseModel):
     version = Column(Integer, nullable=False, default=1)
     
     # Metadatos adicionales flexibles
-    metadata = Column(JSON, nullable=True, default=dict)
+    collection_metadata = Column(JSON, nullable=True, default=dict)
     
     # Notas del creador
     creator_notes = Column(Text, nullable=True)

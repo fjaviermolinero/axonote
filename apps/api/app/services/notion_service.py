@@ -1072,7 +1072,7 @@ class NotionService(BaseService):
     """Servicio completo de integración con Notion."""
     
     def __init__(self):
-        super().__init__()
+        super().__init__("NotionService")
         self.client: Optional[Client] = None
         self.rate_limiter: Optional[RateLimiter] = None
         self.template_manager: Optional[NotionTemplateManager] = None

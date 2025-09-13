@@ -218,7 +218,7 @@ class OCRResult(BaseModel):
     last_attempt_at = Column(DateTime, nullable=True)
     
     # Metadatos adicionales flexibles (JSON)
-    metadata = Column(JSON, nullable=True, default=dict)
+    ocr_metadata = Column(JSON, nullable=True, default=dict)
     
     # ==============================================
     # RELACIONES

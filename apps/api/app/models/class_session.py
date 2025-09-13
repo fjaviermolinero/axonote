@@ -7,7 +7,7 @@ from datetime import date, datetime
 from typing import Optional
 
 from sqlalchemy import (
-    Column, String, Text, Integer, Float, Date, 
+    Column, String, Text, Integer, Float, Date, DateTime,
     Enum, ForeignKey, JSON
 )
 from sqlalchemy.dialects.postgresql import UUID

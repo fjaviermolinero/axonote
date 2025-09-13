@@ -44,10 +44,17 @@ class LoggingSetup:
         # Handler para archivo (si está configurado)
         if settings.LOG_FILE:
             log_path = Path(settings.LOG_FILE)
-            log_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                log_path.parent.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                # Si no se puede crear el directorio, usar un directorio temporal
+                import tempfile
+                temp_dir = Path(tempfile.gettempdir()) / "axonote_logs"
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                log_path = temp_dir / "axonote.log"
             
             logger.add(
-                settings.LOG_FILE,
+                str(log_path),
                 format=log_format,
                 level=settings.LOG_LEVEL,
                 rotation="10 MB",
@@ -117,6 +124,22 @@ class ContextLogger:
     def __init__(self, context: str):
         self.context = context
         self.logger = logger.bind(context=context)
+    
+    def info(self, message: str, **kwargs):
+        """Log mensaje de información."""
+        self.logger.info(message, **kwargs)
+    
+    def error(self, message: str, **kwargs):
+        """Log mensaje de error."""
+        self.logger.error(message, **kwargs)
+    
+    def warning(self, message: str, **kwargs):
+        """Log mensaje de advertencia."""
+        self.logger.warning(message, **kwargs)
+    
+    def debug(self, message: str, **kwargs):
+        """Log mensaje de debug."""
+        self.logger.debug(message, **kwargs)
     
     def log_transcription_start(
         self, 

@@ -19,7 +19,7 @@ class MinioService(BaseService):
     """Servicio para gestión de almacenamiento con MinIO."""
     
     def __init__(self):
-        super().__init__()
+        super().__init__("MinioService")
         self.client: Optional[Minio] = None
         self.bucket_name = settings.MINIO_BUCKET
     

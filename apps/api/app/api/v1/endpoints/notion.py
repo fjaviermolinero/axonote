@@ -20,8 +20,7 @@ from app.models import (
 )
 from app.services.notion_service import notion_service
 from app.tasks.notion import (
-    full_sync_class_task, bidirectional_sync_task, workspace_maintenance_task,
-    manage_attachments_task
+    full_sync_class_task, bidirectional_sync_task, workspace_maintenance_task
 )
 
 router = APIRouter()
@@ -449,11 +448,13 @@ async def manage_class_attachments(
     if not class_session:
         raise HTTPException(status_code=404, detail="Clase no encontrada")
     
-    task = manage_attachments_task.apply_async(args=[str(class_session_id)])
+    # TODO: Implementar manage_attachments_task
+    # task = manage_attachments_task.apply_async(args=[str(class_session_id)])
+    task = None
     
     return {
         "status": "queued",
-        "task_id": task.id,
+        "task_id": None,  # task.id if task else None,
         "message": f"Gestión de attachments iniciada para clase '{class_session.class_name}'"
     }
 

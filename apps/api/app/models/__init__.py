@@ -8,7 +8,7 @@ from .professor import Professor
 from .source import Source
 from .term import Term
 from .card import Card
-from .upload_session import UploadSession, ChunkUpload
+from .upload_session import UploadSession, ChunkUpload, EstadoUpload
 from .processing_job import ProcessingJob
 from .transcription_result import TranscriptionResult
 from .diarization_result import DiarizationResult
@@ -39,6 +39,7 @@ __all__ = [
     "Card",
     "UploadSession",
     "ChunkUpload",
+    "EstadoUpload",
     "ProcessingJob",
     "TranscriptionResult",
     "DiarizationResult",

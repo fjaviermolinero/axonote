@@ -74,7 +74,7 @@ class DiarizationService(BaseService):
     """
 
     def __init__(self):
-        super().__init__()
+        super().__init__("DiarizationService")
         self.pipeline_diarizacion = None
         self.embedding_model = None
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

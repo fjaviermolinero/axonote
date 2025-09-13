@@ -7,13 +7,13 @@ import secrets
 from typing import Any, Dict, List, Optional, Union
 from pydantic import (
     AnyHttpUrl,
-    BaseSettings,
     EmailStr,
     HttpUrl,
     PostgresDsn,
     RedisDsn,
     validator,
 )
+from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
@@ -55,23 +55,15 @@ class Settings(BaseSettings):
     
     # Configuración de auditoría
     AUDIT_LOG_RETENTION_DAYS: int = 365
-    AUDIT_LOG_SENSITIVE_FIELDS: List[str] = ["password", "token", "secret"]
+    AUDIT_LOG_SENSITIVE_FIELDS: str = "password,token,secret"
     
     # API Configuration
     API_PORT: int = 8000
     API_HOST: str = "0.0.0.0"
     API_V1_STR: str = "/api/v1"
     
-    # CORS
-    CORS_ORIGINS: List[AnyHttpUrl] = ["http://localhost:3000"]
-    
-    @validator("CORS_ORIGINS", pre=True)
-    def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, (list, str)):
-            return v
-        raise ValueError(v)
+    # CORS  
+    CORS_ORIGINS: str = "http://localhost:3000"
     
     # ==============================================
     # BASE DE DATOS
@@ -278,7 +270,7 @@ class Settings(BaseSettings):
     SEARCH_TIMEOUT_SECONDS: int = 30
     
     # Idiomas y localización
-    SUPPORTED_RESEARCH_LANGUAGES: List[str] = ["it", "en", "es"]
+    SUPPORTED_RESEARCH_LANGUAGES: str = "it,en,es"
     TRANSLATION_SERVICE_ENABLED: bool = True
     ITALIAN_SOURCES_PRIORITY: bool = True
     
@@ -339,8 +331,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_PER_MINUTE: int = 60
     MAX_UPLOAD_SIZE_MB: int = 500
     MAX_CHUNK_SIZE_MB: int = 10
-    ALLOWED_AUDIO_FORMATS: List[str] = ["wav", "mp3", "m4a", "flac", "ogg"]
-    ALLOWED_IMAGE_FORMATS: List[str] = ["jpg", "jpeg", "png", "webp"]
+    ALLOWED_AUDIO_FORMATS: str = "wav,mp3,m4a,flac,ogg"
+    ALLOWED_IMAGE_FORMATS: str = "jpg,jpeg,png,webp"
     
     # ==============================================
     # LOGGING
@@ -348,26 +340,17 @@ class Settings(BaseSettings):
     
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "json"  # json | text
-    LOG_FILE: Optional[str] = "/app/logs/axonote.log"
+    LOG_FILE: Optional[str] = None  # "/app/logs/axonote.log"
     
     # ==============================================
     # FUENTES MÉDICAS Y IDIOMAS
     # ==============================================
     
-    ALLOWED_MEDICAL_SOURCES: List[str] = [
-        "who.int",
-        "ecdc.europa.eu", 
-        "cdc.gov",
-        "nih.gov",
-        "pubmed.ncbi.nlm.nih.gov",
-        "nice.org.uk",
-        "ema.europa.eu",
-        "cochrane.org"
-    ]
+    ALLOWED_MEDICAL_SOURCES: str = "who.int,ecdc.europa.eu,cdc.gov,nih.gov,pubmed.ncbi.nlm.nih.gov,nice.org.uk,ema.europa.eu,cochrane.org"
     
     DEFAULT_SOURCE_LANGUAGE: str = "it"  # Idioma principal de las clases
     OUTPUT_LANGUAGE: str = "es"  # Idioma de salida (resúmenes)
-    SUPPORTED_LANGUAGES: List[str] = ["it", "en", "es"]
+    SUPPORTED_LANGUAGES: str = "it,en,es"
     
     # ==============================================
     # PROCESAMIENTO

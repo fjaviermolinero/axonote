@@ -4,10 +4,12 @@ Incluye configuraciones comunes y utilidades.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Generic, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
+
+T = TypeVar('T')
 
 
 class BaseSchema(BaseModel):
@@ -58,3 +60,12 @@ class ErrorResponse(BaseSchema):
     message: str = Field(..., description="Descripción del error")
     details: Optional[dict] = Field(None, description="Detalles adicionales del error")
     success: bool = Field(False, description="Indica operación fallida")
+
+
+class ResponseModel(BaseSchema, Generic[T]):
+    """Modelo de respuesta genérico."""
+    
+    success: bool = Field(True, description="Indica si la operación fue exitosa")
+    message: str = Field("", description="Mensaje descriptivo")
+    data: Optional[T] = Field(None, description="Datos de la respuesta")
+    errors: Optional[list] = Field(None, description="Lista de errores si los hay")
